@@ -14,6 +14,7 @@ interface Action {
   typingSpeed?: number;
   voiceover?: string;
   voice?: string;
+  voiceoverTiming?: 'before' | 'after' | 'during'; // When to play the voiceover
 }
 
 interface Blueprint {
