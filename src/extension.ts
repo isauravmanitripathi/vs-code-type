@@ -4,8 +4,10 @@ import * as path from 'path';
 import * as os from 'os';
 import { exec } from 'child_process';
 import { promisify } from 'util';
+const playSound = require('play-sound');
 
 const execAsync = promisify(exec);
+const player = playSound({});
 
 interface Action {
   type: 'createFolder' | 'createFile' | 'openFile' | 'writeText' | 'deleteLine' | 'insertAt' | 'replaceText';
@@ -141,36 +143,18 @@ export function activate(context: vscode.ExtensionContext) {
 }
 
 async function playVoiceover(text: string, voice: string, tempDir: string): Promise<void> {
-  const audioFile = path.join(tempDir, `audio_${Date.now()}.mp3`);
-  
   try {
-    // Generate audio using edge-tts
-    const ttsCommand = `edge-tts --voice "${voice}" --text "${text.replace(/"/g, '\\"')}" --write-media "${audioFile}"`;
+    console.log('Speaking:', text.substring(0, 50) + '...');
     
-    console.log('Generating audio:', text.substring(0, 50) + '...');
-    
-    // Generate the audio file
-    const { stdout, stderr } = await execAsync(ttsCommand);
-    
-    if (stderr) {
-      console.log('TTS stderr:', stderr);
+    // Use macOS 'say' command for immediate playback (no file needed!)
+    if (process.platform === 'darwin') {
+      await macOSSay(text, voice);
+    } else {
+      // For other platforms, try edge-tts with full path
+      await edgeTTSPlayback(text, voice, tempDir);
     }
     
-    // Wait a bit to ensure file is written
-    await delay(200);
-    
-    // Check if file exists
-    if (!fs.existsSync(audioFile)) {
-      console.error('Audio file was not created:', audioFile);
-      return;
-    }
-    
-    console.log('Playing audio file:', audioFile);
-    
-    // Play the audio file (this will now wait until playback completes)
-    await playAudioFile(audioFile);
-    
-    console.log('Audio playback completed');
+    console.log('Voiceover completed');
     
     // Small delay after audio
     await delay(300);
@@ -178,8 +162,83 @@ async function playVoiceover(text: string, voice: string, tempDir: string): Prom
   } catch (error) {
     console.error('Voiceover error:', error);
     // Continue even if voiceover fails
+  }
+}
+
+async function macOSSay(text: string, voice: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    // macOS built-in text-to-speech - works immediately, no files needed
+    // Map some common voice names to macOS voices
+    let macVoice = 'Samantha'; // default female voice
+    
+    if (voice.includes('Guy') || voice.includes('Male')) {
+      macVoice = 'Alex'; // male voice
+    } else if (voice.includes('Aria') || voice.includes('Female')) {
+      macVoice = 'Samantha'; // female voice
+    }
+    
+    const command = `say -v "${macVoice}" "${text.replace(/"/g, '\\"')}"`;
+    
+    exec(command, (error, stdout, stderr) => {
+      if (error) {
+        console.error('macOS say error:', error);
+        reject(error);
+      } else {
+        resolve();
+      }
+    });
+  });
+}
+
+async function edgeTTSPlayback(text: string, voice: string, tempDir: string): Promise<void> {
+  const audioFile = path.join(tempDir, `audio_${Date.now()}.mp3`);
+  
+  try {
+    // Try common edge-tts installation paths
+    const possiblePaths = [
+      'edge-tts', // Try default first
+      '/opt/homebrew/bin/edge-tts',
+      '/usr/local/bin/edge-tts',
+      '/opt/homebrew/Caskroom/miniconda/base/bin/edge-tts',
+      `${process.env.HOME}/.local/bin/edge-tts`,
+      `${process.env.HOME}/miniconda3/bin/edge-tts`,
+      `${process.env.HOME}/anaconda3/bin/edge-tts`
+    ];
+    
+    let edgeTTSPath = 'edge-tts';
+    
+    // Find working edge-tts path
+    for (const p of possiblePaths) {
+      try {
+        await execAsync(`which ${p}`);
+        edgeTTSPath = p;
+        console.log('Found edge-tts at:', p);
+        break;
+      } catch (e) {
+        continue;
+      }
+    }
+    
+    const ttsCommand = `${edgeTTSPath} --voice "${voice}" --text "${text.replace(/"/g, '\\"')}" --write-media "${audioFile}"`;
+    
+    console.log('Generating audio with command:', ttsCommand);
+    
+    const { stdout, stderr } = await execAsync(ttsCommand);
+    
+    if (stderr) {
+      console.log('TTS stderr:', stderr);
+    }
+    
+    await delay(200);
+    
+    if (!fs.existsSync(audioFile)) {
+      throw new Error('Audio file was not created');
+    }
+    
+    console.log('Playing audio file:', audioFile);
+    await playAudioFile(audioFile);
+    
   } finally {
-    // Clean up the audio file
     try {
       if (fs.existsSync(audioFile)) {
         fs.unlinkSync(audioFile);
@@ -192,27 +251,49 @@ async function playVoiceover(text: string, voice: string, tempDir: string): Prom
 
 async function playAudioFile(filePath: string): Promise<void> {
   return new Promise((resolve, reject) => {
-    let command: string;
+    console.log('Attempting to play audio:', filePath);
     
-    // Determine the command based on OS
-    if (process.platform === 'darwin') {
-      // macOS - afplay blocks until audio finishes
-      command = `afplay "${filePath}"`;
-    } else if (process.platform === 'win32') {
-      // Windows - use powershell with PlaySync (blocks)
-      command = `powershell -c "(New-Object Media.SoundPlayer '${filePath}').PlaySync()"`;
-    } else {
-      // Linux - these commands block until audio finishes
-      command = `mpg123 "${filePath}" 2>/dev/null || ffplay -nodisp -autoexit "${filePath}" 2>/dev/null || aplay "${filePath}" 2>/dev/null`;
+    // Check if file exists and has size
+    const stats = fs.statSync(filePath);
+    console.log('Audio file size:', stats.size, 'bytes');
+    
+    if (stats.size === 0) {
+      console.error('Audio file is empty!');
+      resolve();
+      return;
     }
     
-    // Use child_process.spawn for better control
-    const child = exec(command, (error, stdout, stderr) => {
-      if (error) {
-        console.error('Audio playback error:', error);
-        console.error('stderr:', stderr);
+    // Use play-sound library which handles cross-platform audio
+    player.play(filePath, (err: any) => {
+      if (err) {
+        console.error('Error playing audio:', err);
+        // Try fallback to system command
+        fallbackPlayAudio(filePath).then(resolve).catch(() => resolve());
+      } else {
+        console.log('Audio finished playing');
+        resolve();
       }
-      // Resolve after command completes
+    });
+  });
+}
+
+async function fallbackPlayAudio(filePath: string): Promise<void> {
+  console.log('Using fallback audio playback');
+  return new Promise((resolve) => {
+    let command: string;
+    
+    if (process.platform === 'darwin') {
+      command = `afplay "${filePath}"`;
+    } else if (process.platform === 'win32') {
+      command = `powershell -c "(New-Object Media.SoundPlayer '${filePath}').PlaySync()"`;
+    } else {
+      command = `mpg123 "${filePath}" 2>/dev/null || ffplay -nodisp -autoexit "${filePath}" 2>/dev/null`;
+    }
+    
+    exec(command, (error, stdout, stderr) => {
+      if (error) {
+        console.error('Fallback audio error:', error);
+      }
       resolve();
     });
   });
