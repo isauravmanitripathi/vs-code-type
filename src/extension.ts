@@ -95,15 +95,39 @@ export function activate(context: vscode.ExtensionContext) {
         });
 
         try {
-          // Play voiceover BEFORE action if enabled
-          if (enableVoiceover && action.voiceover) {
-            statusBarItem.text = `🔊 ${action.voiceover.substring(0, 50)}...`;
-            const voiceToUse = action.voice || defaultVoice;
-            await audioHandler.playVoiceover(action.voiceover, voiceToUse);
+          // Handle voiceover timing
+          const voiceoverTiming = action.voiceover ? (action.voiceoverTiming || 'before') : null;
+          const voiceToUse = action.voice || defaultVoice;
+
+          // BEFORE: Play voiceover before action
+          if (voiceoverTiming === 'before') {
+            statusBarItem.text = `🔊 ${action.voiceover!.substring(0, 50)}...`;
+            await audioHandler.playVoiceover(action.voiceover!, voiceToUse);
           }
 
-          // Execute the action
+          // DURING: Start voiceover and action simultaneously (don't await)
+          let duringAudioPromise: Promise<void> | null = null;
+          if (voiceoverTiming === 'during') {
+            statusBarItem.text = `🔊 ${action.voiceover!.substring(0, 50)}...`;
+            // Start audio but DON'T await - let it play in background
+            duringAudioPromise = audioHandler.playVoiceover(action.voiceover!, voiceToUse);
+            // Small delay to let audio start before action begins
+            await delay(100);
+          }
+
+          // Execute the action (runs simultaneously with "during" audio)
           await executeAction(action, baseDir, globalTypingSpeed);
+
+          // AFTER: Play voiceover after action completes
+          if (voiceoverTiming === 'after') {
+            statusBarItem.text = `🔊 ${action.voiceover!.substring(0, 50)}...`;
+            await audioHandler.playVoiceover(action.voiceover!, voiceToUse);
+          }
+
+          // If DURING was used, wait for audio to finish (if it's still playing)
+          if (duringAudioPromise) {
+            await duringAudioPromise;
+          }
           
           // Delay between actions
           await delay(actionDelay);
