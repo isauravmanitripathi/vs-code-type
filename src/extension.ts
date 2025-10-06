@@ -125,7 +125,7 @@ export function activate(context: vscode.ExtensionContext) {
             const voiceToUse = action.voice || defaultVoice;
 
             if (enableVoiceover && voiceoverTiming === 'before') {
-              statusBarItem.text = `🔊 ${action.voiceover!.substring(0, 50)}...`;
+              statusBarItem.text = ` ${action.voiceover!.substring(0, 10)}...`;
               await audioHandler.playVoiceover(action.voiceover!, voiceToUse, 'before');
             }
 

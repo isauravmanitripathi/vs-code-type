@@ -1,505 +1,847 @@
-# JSON Project Builder - Complete Guide
+# Complete Guide to Creating JSON Blueprints for VS Code Tutorial Extension
 
-## Overview
+## Table of Contents
+1. [Core Concepts](#core-concepts)
+2. [Global Settings](#global-settings)
+3. [Action Types Reference](#action-types-reference)
+4. [Best Practices](#best-practices)
+5. [Common Patterns](#common-patterns)
+6. [Troubleshooting](#troubleshooting)
 
-JSON Project Builder is a VS Code extension that automates project creation, file editing, and tutorial recording through JSON blueprints. It can create files, insert code with smart indentation, highlight sections, and even add AI voiceovers for tutorial videos.
+---
 
-## Blueprint Structure
+## Core Concepts
 
-### Root Configuration
+### What is a Blueprint?
+A blueprint is a JSON file that defines a step-by-step tutorial. Each action in the blueprint creates files, types code, highlights sections, and plays voiceovers to create an animated coding tutorial.
 
+### Structure Overview
 ```json
 {
-  "rootFolder": "my-project",
-  "globalTypingSpeed": 50,
-  "actionDelay": 800,
-  "defaultVoice": "en-US-AriaNeural",
+  "rootFolder": "project-name",
+  "globalTypingSpeed": 35,
+  "actionDelay": 1200,
+  "defaultVoice": "en-US-AndrewMultilingualNeural",
   "enableVoiceover": true,
   "actions": [...]
 }
 ```
 
-**Properties:**
-- `rootFolder` (required): Base directory name where project will be created
-- `globalTypingSpeed` (optional, default: 50): Milliseconds between each character typed
-- `actionDelay` (optional, default: 800): Milliseconds to wait between actions
-- `defaultVoice` (optional, default: "en-US-AriaNeural"): Default TTS voice for voiceovers
-- `enableVoiceover` (optional, default: true): Enable/disable voiceover playback
-- `actions` (required): Array of action objects to execute
+---
+
+## Global Settings
+
+### `rootFolder` (required)
+**Type:** String  
+**Purpose:** Name of the folder where the project will be created  
+**Example:** `"rootFolder": "my-tutorial-project"`
+
+### `globalTypingSpeed` (optional)
+**Type:** Number (milliseconds per character)  
+**Default:** 50  
+**Purpose:** How fast text is typed character-by-character  
+**Recommendations:**
+- 25-30: Very fast (for experienced viewers)
+- 35-40: Comfortable pace (recommended)
+- 50-70: Slower pace (for beginners)
+
+### `actionDelay` (optional)
+**Type:** Number (milliseconds)  
+**Default:** 800  
+**Purpose:** Pause between each action  
+**Recommendations:**
+- 800-1000: Quick transitions
+- 1200-1500: Comfortable viewing pace (recommended)
+- 2000+: Slower, more deliberate
+
+### `defaultVoice` (optional)
+**Type:** String  
+**Default:** "en-US-AriaNeural"  
+**Purpose:** Azure Speech Service voice for all voiceovers  
+**Common Options:**
+- "en-US-AndrewMultilingualNeural" (male, clear)
+- "en-US-AriaNeural" (female, clear)
+- "en-US-GuyNeural" (male, conversational)
+
+### `enableVoiceover` (optional)
+**Type:** Boolean  
+**Default:** true  
+**Purpose:** Enable/disable all voiceovers globally
 
 ---
 
-## Action Types
+## Action Types Reference
 
 ### 1. `createFolder`
 
-Creates a new folder and reveals it in the explorer.
+Creates a directory in the project.
 
 ```json
 {
   "type": "createFolder",
   "path": "src/components",
-  "voiceover": "First, let's create a components folder",
+  "voiceover": "First, let's create our components folder.",
   "voiceoverTiming": "before"
 }
 ```
 
 **Properties:**
 - `path` (required): Relative path from rootFolder
+- `voiceover` (optional): Text to speak
+- `voiceoverTiming` (optional): "before" | "during" | "after"
+
+**Best Practices:**
+- Create parent folders before child folders
+- Use forward slashes `/` for paths (cross-platform compatible)
 
 ---
 
 ### 2. `createFile`
 
-Creates a new empty file and reveals it in the explorer.
+Creates an empty file.
 
 ```json
 {
   "type": "createFile",
   "path": "src/index.js",
-  "voiceover": "Now we'll create our main entry file",
+  "voiceover": "Now we'll create the main entry point.",
   "voiceoverTiming": "before"
 }
 ```
 
 **Properties:**
-- `path` (required): Relative path from rootFolder
+- `path` (required): Relative file path from rootFolder
+- `voiceover` (optional): Text to speak
+- `voiceoverTiming` (optional): "before" | "during" | "after"
+
+**Best Practices:**
+- File extension determines syntax highlighting
+- Parent directories are created automatically if they don't exist
+- Always create the file before trying to open it
 
 ---
 
 ### 3. `openFile`
 
-Opens an existing file in the editor.
+Opens a file in the editor.
 
 ```json
 {
   "type": "openFile",
   "path": "src/index.js",
-  "voiceover": "Let's open the index file to add our code"
-}
-```
-
-**Properties:**
-- `path` (required): Relative path from rootFolder
-
----
-
-### 4. `writeText`
-
-Types text at the current cursor position with animation.
-
-```json
-{
-  "type": "writeText",
-  "content": "console.log('Hello World');",
-  "typingSpeed": 30,
-  "voiceover": "We'll start with a simple hello world",
-  "voiceoverTiming": "during"
-}
-```
-
-**Properties:**
-- `content` (required): Text to type
-- `typingSpeed` (optional): Override global typing speed for this action
-
----
-
-### 5. `insert`
-
-Inserts code at a specific location with **smart indentation detection**.
-
-#### Insert After Pattern
-
-```json
-{
-  "type": "insert",
-  "after": "def main():",
-  "content": "print('Starting application')\nprint('Loading modules')",
-  "voiceover": "Let's add initialization code"
-}
-```
-
-#### Insert Before Pattern
-
-```json
-{
-  "type": "insert",
-  "before": "if __name__ == '__main__':",
-  "content": "def cleanup():\n    print('Cleaning up')\n",
-  "voiceover": "We need a cleanup function before the main guard"
-}
-```
-
-#### Insert At Line Number
-
-```json
-{
-  "type": "insert",
-  "at": 5,
-  "content": "# Configuration section\nCONFIG = {}\n",
-  "voiceover": "Adding configuration at line 5"
-}
-```
-
-**Location Properties (choose one):**
-- `after` (string): Insert after line containing this pattern
-- `before` (string): Insert before line containing this pattern
-- `at` (number): Insert at specific line number (0-indexed)
-
-**Content Properties:**
-- `content` (required): Code to insert (indentation is automatically normalized)
-
-**Context Disambiguation (optional):**
-- `near` (string): Find pattern near this context text (within ±20 lines)
-- `inside` (string): Find pattern inside this context text (within ±20 lines)
-- `occurrence` (number): Which occurrence to use (1-indexed, default: 1)
-
-**Smart Indentation:**
-- Automatically detects tabs vs spaces
-- Preserves relative indentation in multi-line content
-- Adds extra indentation after lines ending with `:` (Python)
-- Matches sibling-level indentation for other cases
-
----
-
-### 6. `delete`
-
-Finds and deletes text from the document.
-
-```json
-{
-  "type": "delete",
-  "find": "console.log('debug')",
-  "voiceover": "Let's remove this debug statement"
-}
-```
-
-**Properties:**
-- `find` (required): Text pattern to find and delete (fuzzy matched, ignores whitespace)
-
----
-
-### 7. `replace`
-
-Finds text and replaces it with new content.
-
-```json
-{
-  "type": "replace",
-  "find": "localhost:3000",
-  "with": "localhost:8080",
-  "typingSpeed": 20,
-  "voiceover": "Changing the port number to 8080"
-}
-```
-
-**Properties:**
-- `find` (required): Text pattern to find
-- `with` (required): Replacement text
-- `typingSpeed` (optional): Speed for typing replacement
-
----
-
-### 8. `highlight`
-
-Opens a file, finds a pattern, and highlights it (useful for explanations).
-
-```json
-{
-  "type": "highlight",
-  "path": "src/utils.js",
-  "find": "function calculateTotal",
-  "voiceover": "Notice how we calculate the total here",
-  "near": "shopping cart",
-  "occurrence": 1
+  "voiceover": "Let's open our main file and start coding.",
+  "voiceoverTiming": "before"
 }
 ```
 
 **Properties:**
 - `path` (required): File to open
-- `find` (required): Pattern to highlight
-- `voiceover` (required): Explanation of what's being highlighted
-- `near` (optional): Context for disambiguation
-- `inside` (optional): Alternative context for disambiguation
-- `occurrence` (optional): Which match to highlight (default: 1)
+- `voiceover` (optional): Text to speak
+- `voiceoverTiming` (optional): "before" | "during" | "after"
+
+**Best Practices:**
+- File must exist before opening
+- Opening a file makes it the active editor for subsequent actions
 
 ---
 
-## Voiceover Configuration
+### 4. `writeText`
 
-All actions support optional voiceover narration:
+Types text character-by-character at the current cursor position.
 
 ```json
 {
-  "type": "createFile",
-  "path": "app.py",
-  "voiceover": "Let's create our main application file",
-  "voice": "en-US-GuyNeural",
+  "type": "writeText",
+  "content": "import React from 'react';\n\n",
+  "voiceover": "We start by importing React at the top of our file.",
+  "voiceoverTiming": "during",
+  "typingSpeed": 30
+}
+```
+
+**Properties:**
+- `content` (required): Text to type (use `\n` for newlines)
+- `voiceover` (optional): Text to speak
+- `voiceoverTiming` (optional): "before" | "during" | "after"
+- `typingSpeed` (optional): Override global typing speed
+
+**Critical Best Practices:**
+
+**DO write complete logical blocks:**
+```json
+{
+  "type": "writeText",
+  "content": "function calculateSum(a, b) {\n    return a + b;\n}\n"
+}
+```
+
+**DON'T write incomplete fragments:**
+```json
+// WRONG - leaves code broken
+{
+  "type": "writeText",
+  "content": "function calculateSum(a, b) {\n"
+}
+```
+
+**Handle spacing properly:**
+```json
+// Add spacing BEFORE sections
+{
+  "type": "writeText",
+  "content": "\n\n// Helper functions\n"
+}
+
+// NOT after, which leaves cursor in awkward position
+{
+  "type": "writeText",
+  "content": "// Helper functions\n\n\n"
+}
+```
+
+**Use escape sequences:**
+- `\n` for newlines
+- `\t` for tabs (though spaces are recommended)
+- `\"` for quotes inside strings
+
+---
+
+### 5. `insert`
+
+Inserts code at a specific location using pattern matching.
+
+**Insert After Pattern:**
+```json
+{
+  "type": "insert",
+  "after": "import React from 'react';",
+  "content": "import { useState } from 'react';\n",
+  "voiceover": "Now let's add the useState hook import.",
+  "voiceoverTiming": "during",
+  "typingSpeed": 30
+}
+```
+
+**Insert Before Pattern:**
+```json
+{
+  "type": "insert",
+  "before": "export default App;",
+  "content": "\nconsole.log('App initialized');\n",
+  "near": "App component"
+}
+```
+
+**Insert At Line Number:**
+```json
+{
+  "type": "insert",
+  "at": 10,
+  "content": "// TODO: Add error handling\n"
+}
+```
+
+**Properties:**
+- `after` | `before` | `at` (one required): Location selector
+- `content` (required): Text to insert
+- `near` (optional): Context hint for disambiguation
+- `inside` (optional): Section context
+- `occurrence` (optional): Which match (1-indexed, default: 1)
+- `voiceover` (optional): Text to speak
+- `voiceoverTiming` (optional): "before" | "during" | "after"
+- `typingSpeed` (optional): Override global speed
+
+**Best Practices:**
+
+**Use patterns that are unique:**
+```json
+// GOOD - unique pattern
+"after": "class UserService {"
+
+// BAD - too generic, might match multiple places
+"after": "{"
+```
+
+**Use `near` for disambiguation:**
+```json
+{
+  "after": "return data;",
+  "near": "fetchUser function",
+  "content": "// Cache the result\n"
+}
+```
+
+**Include proper indentation context:**
+The extension automatically detects and applies indentation, but your content should have relative indentation:
+```json
+{
+  "after": "if (isValid) {",
+  "content": "    console.log('Valid input');\n    processData();\n"
+}
+```
+
+---
+
+### 6. `highlight`
+
+Visually highlights code and optionally explains it with voiceover.
+
+```json
+{
+  "type": "highlight",
+  "path": "src/index.js",
+  "find": "useState(0)",
+  "voiceover": "Notice how we initialize the state with zero. The highlight stays visible while I explain this concept.",
+  "voiceoverTiming": "during",
+  "moveCursor": "endOfFile",
+  "near": "Counter component",
+  "occurrence": 1
+}
+```
+
+**Properties:**
+- `path` (required): File to highlight in
+- `find` (required): Pattern to highlight
+- `voiceover` (optional but recommended): Explanation
+- `voiceoverTiming` (optional): "before" | "during" | "after"
+- `moveCursor` (optional): Where to move cursor after highlight
+- `near` (optional): Context for finding pattern
+- `inside` (optional): Section context
+- `occurrence` (optional): Which match (1-indexed)
+
+**Cursor Movement Options:**
+- `"endOfFile"`: Move to end of document (default smart behavior)
+- `"newLineAfter"`: Insert newline after highlighted line, move cursor there
+- `"newLineBefore"`: Insert newline before highlighted line
+- `"sameLine"`: Stay at end of highlighted line
+- `"stay"`: Don't move cursor at all
+- `"nextBlankLine"`: Find next empty line
+
+**Critical Highlight Best Practices:**
+
+**Always specify `voiceoverTiming` for highlights:**
+```json
+// CORRECT - highlight stays until voiceover finishes
+{
+  "type": "highlight",
+  "find": "for loop",
+  "voiceover": "This loop iterates...",
+  "voiceoverTiming": "during"  // REQUIRED
+}
+
+// WRONG - might disappear too quickly
+{
+  "type": "highlight",
+  "find": "for loop",
+  "voiceover": "This loop iterates..."
+  // Missing voiceoverTiming
+}
+```
+
+**Always specify `moveCursor` to prevent conflicts:**
+```json
+// CORRECT - explicit cursor control
+{
+  "type": "highlight",
+  "find": "function declaration",
+  "voiceover": "Notice the function signature...",
+  "voiceoverTiming": "during",
+  "moveCursor": "endOfFile"  // Cursor moves away
+}
+
+// If you want to continue typing right after highlight:
+{
+  "type": "highlight",
+  "find": "const x = 5;",
+  "voiceover": "We initialize x here...",
+  "voiceoverTiming": "during",
+  "moveCursor": "newLineAfter"  // Ready to type on next line
+}
+```
+
+**Use specific patterns:**
+```json
+// GOOD - specific enough to find
+"find": "const [count, setCount] = useState(0);"
+
+// BAD - too vague, might match wrong line
+"find": "useState"
+```
+
+**Use `near` for complex files:**
+```json
+{
+  "find": "return",
+  "near": "handleSubmit function",  // Disambiguates which return statement
+  "occurrence": 1
+}
+```
+
+---
+
+### 7. `delete`
+
+Removes text matching a pattern.
+
+```json
+{
+  "type": "delete",
+  "find": "console.log('debug');",
+  "voiceover": "Let's remove this debug statement.",
   "voiceoverTiming": "before"
 }
 ```
 
-**Voiceover Properties:**
+**Properties:**
+- `find` (required): Pattern to delete
 - `voiceover` (optional): Text to speak
-- `voice` (optional): Override default voice (uses Azure Neural TTS voices)
-- `voiceoverTiming` (optional): When to play voiceover
-  - `"before"` - Play before executing action (default)
-  - `"during"` - Play while action executes
-  - `"after"` - Play after action completes
+- `voiceoverTiming` (optional): "before" | "during" | "after"
 
-**Available Voices (examples):**
-- `en-US-AriaNeural` (Female, default)
-- `en-US-GuyNeural` (Male)
-- `en-US-JennyNeural` (Female)
-- `en-GB-SoniaNeural` (British Female)
-- `en-AU-NatashaNeural` (Australian Female)
+**Best Practices:**
+- Use specific patterns to avoid deleting wrong code
+- Shows selection briefly before deleting (500ms)
+- Automatically formats code after deletion
 
 ---
 
-## Pattern Matching & Disambiguation
+### 8. `replace`
 
-The extension uses **fuzzy matching** - it trims whitespace when searching for patterns.
-
-### Basic Pattern Matching
-
-```json
-{
-  "type": "insert",
-  "after": "def process_data():",
-  "content": "data = load_data()"
-}
-```
-
-This will match any of:
-- `def process_data():`
-- `    def process_data():`
-- `        def process_data():`
-
-### Using Context for Disambiguation
-
-When multiple matches exist, use `near` or `inside`:
-
-```json
-{
-  "type": "insert",
-  "after": "return result",
-  "near": "calculate_total",
-  "content": "logger.info('Calculation complete')"
-}
-```
-
-This finds `return result` within ±20 lines of `calculate_total`.
-
-### Selecting Specific Occurrence
+Replaces text matching a pattern with new text.
 
 ```json
 {
   "type": "replace",
-  "find": "TODO",
-  "with": "DONE",
-  "occurrence": 3
+  "find": "const API_URL = 'localhost:3000';",
+  "with": "const API_URL = 'https://api.production.com';",
+  "voiceover": "Now let's update the API URL for production.",
+  "voiceoverTiming": "before",
+  "typingSpeed": 25
 }
 ```
 
-Replaces the 3rd occurrence of "TODO".
+**Properties:**
+- `find` (required): Pattern to replace
+- `with` (required): Replacement text
+- `voiceover` (optional): Text to speak
+- `voiceoverTiming` (optional): "before" | "during" | "after"
+- `typingSpeed` (optional): Speed for typing replacement
+
+**Best Practices:**
+- Replacement text is typed character-by-character
+- Shows selection for 800ms before replacing
+- Use for demonstrating refactoring or configuration changes
 
 ---
 
-## Complete Example: Python Flask App
+## Best Practices
+
+### 1. Building Code Incrementally
+
+**DO: Write complete, working sections**
+```json
+{
+  "type": "writeText",
+  "content": "class Calculator {\n    constructor() {\n        this.result = 0;\n    }\n}\n"
+}
+```
+
+**DON'T: Leave code incomplete between actions**
+```json
+// WRONG - leaves broken code
+{
+  "type": "writeText",
+  "content": "class Calculator {\n"
+},
+{
+  "type": "highlight",
+  "find": "something else"
+},
+{
+  "type": "writeText",
+  "content": "    constructor() {\n"
+}
+```
+
+### 2. Spacing Strategy
+
+**Add spacing BEFORE new sections:**
+```json
+{
+  "type": "writeText",
+  "content": "function first() {}\n"
+},
+{
+  "type": "writeText",
+  "content": "\n\n// Second function\nfunction second() {}\n"
+}
+```
+
+**NOT after (leaves cursor hanging):**
+```json
+// WRONG
+{
+  "type": "writeText",
+  "content": "function first() {}\n\n\n"
+},
+{
+  "type": "writeText",
+  "content": "// Second function\n"
+}
+```
+
+### 3. Voiceover Timing
+
+**"before"**: For introductions and setup actions
+```json
+{
+  "type": "createFile",
+  "voiceoverTiming": "before",  // Speak, then create
+  "voiceover": "Let's create a new component file."
+}
+```
+
+**"during"**: For concurrent actions (typing, highlighting)
+```json
+{
+  "type": "writeText",
+  "voiceoverTiming": "during",  // Speak while typing
+  "voiceover": "We import React and set up our component."
+}
+```
+
+**"after"**: For explanations after completion
+```json
+{
+  "type": "openFile",
+  "voiceoverTiming": "after",  // Open, then speak
+  "voiceover": "Now we have our file open and ready."
+}
+```
+
+### 4. Pattern Matching Tips
+
+**Fuzzy matching ignores whitespace:**
+```json
+// These all match the same line:
+"find": "function example() {"
+"find": "function example(){"
+"find": "function   example  (  )   {"
+```
+
+**Use `near` for disambiguation:**
+```json
+{
+  "find": "return result;",
+  "near": "calculate function",  // Finds return in calculate()
+  "occurrence": 1
+}
+```
+
+**Use `occurrence` for multiple matches:**
+```json
+{
+  "find": "console.log",
+  "occurrence": 2  // Finds the second console.log
+}
+```
+
+### 5. File Organization
+
+**Create files in logical order:**
+```json
+{
+  "actions": [
+    {"type": "createFolder", "path": "src"},
+    {"type": "createFolder", "path": "src/components"},
+    {"type": "createFile", "path": "src/index.js"},
+    {"type": "createFile", "path": "src/components/App.js"}
+  ]
+}
+```
+
+### 6. Typing Speed Variations
+
+Use different speeds for emphasis:
+```json
+{
+  "type": "writeText",
+  "content": "// This is important!\n",
+  "typingSpeed": 50  // Slower for emphasis
+},
+{
+  "type": "writeText",
+  "content": "const boilerplate = {};\n",
+  "typingSpeed": 20  // Faster for boring code
+}
+```
+
+---
+
+## Common Patterns
+
+### Pattern 1: File Creation Workflow
 
 ```json
 {
-  "rootFolder": "flask-demo",
-  "globalTypingSpeed": 40,
-  "actionDelay": 1000,
-  "defaultVoice": "en-US-AriaNeural",
-  "enableVoiceover": true,
   "actions": [
     {
-      "type": "createFolder",
-      "path": "templates",
-      "voiceover": "First, we'll create a templates folder for our HTML files"
-    },
-    {
       "type": "createFile",
-      "path": "app.py",
-      "voiceover": "Now let's create the main application file"
+      "path": "app.js",
+      "voiceover": "Creating our main application file.",
+      "voiceoverTiming": "before"
     },
     {
       "type": "openFile",
-      "path": "app.py",
-      "voiceover": "Opening app.py to write our Flask code"
+      "path": "app.js",
+      "voiceover": "Opening the file to start coding.",
+      "voiceoverTiming": "before"
     },
     {
       "type": "writeText",
-      "content": "from flask import Flask, render_template\n\napp = Flask(__name__)\n",
-      "voiceover": "We start by importing Flask and creating our app instance",
+      "content": "// Application entry point\n",
+      "voiceover": "Adding a descriptive comment.",
       "voiceoverTiming": "during"
-    },
-    {
-      "type": "insert",
-      "after": "app = Flask(__name__)",
-      "content": "\n@app.route('/')\ndef home():\n    return render_template('index.html')\n",
-      "voiceover": "Now let's add a route for the home page"
-    },
-    {
-      "type": "insert",
-      "after": "return render_template('index.html')",
-      "content": "\n@app.route('/about')\ndef about():\n    return render_template('about.html')\n",
-      "voiceover": "And another route for the about page"
-    },
-    {
-      "type": "insert",
-      "at": -1,
-      "content": "\nif __name__ == '__main__':\n    app.run(debug=True)\n",
-      "voiceover": "Finally, we add the code to run our server"
-    },
-    {
-      "type": "highlight",
-      "path": "app.py",
-      "find": "@app.route('/')",
-      "voiceover": "This decorator tells Flask to call this function when someone visits the home page"
-    },
-    {
-      "type": "createFile",
-      "path": "templates/index.html",
-      "voiceover": "Creating our index template"
-    },
-    {
-      "type": "openFile",
-      "path": "templates/index.html"
-    },
-    {
-      "type": "writeText",
-      "content": "<!DOCTYPE html>\n<html>\n<head>\n    <title>Flask Demo</title>\n</head>\n<body>\n    <h1>Welcome!</h1>\n</body>\n</html>",
-      "voiceover": "Adding basic HTML structure",
-      "typingSpeed": 25
     }
   ]
 }
 ```
 
----
-
-## Tips & Best Practices
-
-### 1. **Indentation is Automatic**
-Don't worry about matching indentation in your `content` - the extension handles it:
+### Pattern 2: Explain Then Code
 
 ```json
 {
-  "type": "insert",
-  "after": "class MyClass:",
-  "content": "def __init__(self):\n    self.data = []\n    self.count = 0"
+  "actions": [
+    {
+      "type": "writeText",
+      "content": "\n// Step 1: Initialize variables\n",
+      "voiceover": "First, we need to set up our initial variables.",
+      "voiceoverTiming": "before"
+    },
+    {
+      "type": "writeText",
+      "content": "let counter = 0;\nlet total = 0;\n",
+      "voiceover": "We create a counter and a total accumulator.",
+      "voiceoverTiming": "during"
+    }
+  ]
 }
 ```
 
-Even if you write content without indentation, it will be properly indented.
-
-### 2. **Use Descriptive Voiceovers**
-Make voiceovers conversational and educational:
-- ✅ "Now we'll add error handling to catch any issues"
-- ❌ "Inserting try-catch block"
-
-### 3. **Timing Voiceovers**
-- Use `"before"` for explanations
-- Use `"during"` for longer actions to save time
-- Use `"after"` for confirmations or next steps
-
-### 4. **Action Delays**
-Adjust delays based on complexity:
-- Simple actions: 500-800ms
-- File operations: 1000-1500ms
-- Complex animations: 2000ms+
-
-### 5. **Pattern Matching**
-Make patterns specific enough to be unique:
-- ✅ `"def calculate_total(items):"`
-- ❌ `"def"` (too generic)
-
-### 6. **Multi-line Content**
-Use `\n` for newlines in JSON strings:
+### Pattern 3: Highlight and Explain Multiple Lines
 
 ```json
 {
-  "content": "function example() {\n    console.log('hello');\n    return true;\n}"
+  "actions": [
+    {
+      "type": "writeText",
+      "content": "function processData(input) {\n    const validated = validate(input);\n    const transformed = transform(validated);\n    return save(transformed);\n}\n"
+    },
+    {
+      "type": "highlight",
+      "find": "const validated = validate(input);",
+      "voiceover": "First, we validate the input data.",
+      "voiceoverTiming": "during",
+      "moveCursor": "endOfFile"
+    },
+    {
+      "type": "highlight",
+      "find": "const transformed = transform(validated);",
+      "voiceover": "Then we transform it to our desired format.",
+      "voiceoverTiming": "during",
+      "moveCursor": "endOfFile"
+    },
+    {
+      "type": "highlight",
+      "find": "return save(transformed);",
+      "voiceover": "Finally, we save the processed data.",
+      "voiceoverTiming": "during",
+      "moveCursor": "endOfFile"
+    }
+  ]
 }
 ```
 
-### 7. **Testing**
-Start with `enableVoiceover: false` while testing to speed up iterations.
+### Pattern 4: Refactoring Demo
 
----
-
-## Running Your Blueprint
-
-1. Open VS Code with a workspace folder
-2. Press `Ctrl+Shift+P` (or `Cmd+Shift+P` on Mac)
-3. Type "JSON Project Builder: Build from JSON"
-4. Select your blueprint JSON file
-5. Watch the magic happen!
+```json
+{
+  "actions": [
+    {
+      "type": "writeText",
+      "content": "const result = data.filter(x => x.active).map(x => x.value);\n"
+    },
+    {
+      "type": "highlight",
+      "find": "const result = data.filter(x => x.active).map(x => x.value);",
+      "voiceover": "This works, but it's hard to read. Let's refactor it.",
+      "voiceoverTiming": "during",
+      "moveCursor": "stay"
+    },
+    {
+      "type": "replace",
+      "find": "const result = data.filter(x => x.active).map(x => x.value);",
+      "with": "const activeItems = data.filter(x => x.active);\nconst result = activeItems.map(x => x.value);",
+      "voiceover": "Much better! Now it's clear we're filtering first, then mapping.",
+      "voiceoverTiming": "after"
+    }
+  ]
+}
+```
 
 ---
 
 ## Troubleshooting
 
-**Pattern not found errors:**
-- Make sure your pattern exists in the file
-- Try using a more specific or unique pattern
-- Use `near` or `inside` for disambiguation
-- Check that the file has been created and opened first
+### Issue: Pattern Not Found
 
-**Indentation issues:**
-- The extension auto-detects tabs vs spaces
-- Relative indentation in your content is preserved
-- If issues persist, check your `content` formatting
+**Problem:** `Pattern not found: "my pattern"`
 
-**Voiceover not playing:**
-- Ensure `enableVoiceover: true` in root config
-- Check that your system has audio output
-- Verify the voice name is correct
-
----
-
-## Advanced Patterns
-
-### Creating a Full Project Structure
+**Solutions:**
+1. Check for typos in the pattern
+2. Use `near` to provide context
+3. Verify the code exists before trying to find it
+4. Remember fuzzy matching ignores whitespace
 
 ```json
+// Add context
 {
-  "rootFolder": "my-app",
-  "actions": [
-    {"type": "createFolder", "path": "src"},
-    {"type": "createFolder", "path": "src/components"},
-    {"type": "createFolder", "path": "src/utils"},
-    {"type": "createFolder", "path": "tests"},
-    {"type": "createFile", "path": "src/index.js"},
-    {"type": "createFile", "path": "package.json"},
-    {"type": "createFile", "path": "README.md"}
-  ]
+  "find": "return value;",
+  "near": "calculateTotal function"
 }
 ```
 
-### Refactoring Code
+### Issue: Cursor in Wrong Location
+
+**Problem:** Next `writeText` inserts code in the wrong place
+
+**Solutions:**
+1. Always set `moveCursor` on highlights
+2. Use `insert` with `after`/`before` instead of `writeText`
+3. Use explicit cursor positioning
 
 ```json
 {
+  "type": "highlight",
+  "find": "something",
+  "moveCursor": "endOfFile"  // Add this
+}
+```
+
+### Issue: Code Looks Messy
+
+**Problem:** Indentation is wrong or inconsistent
+
+**Solutions:**
+1. The extension auto-formats, but provide proper relative indentation
+2. Use consistent spacing in `content`
+3. Let the extension handle absolute indentation
+
+```json
+// Your content should have relative indentation
+{
+  "after": "function example() {",
+  "content": "    // Indented once relative to function\n    console.log('hello');\n"
+}
+```
+
+### Issue: Multiple Matches
+
+**Problem:** Pattern matches multiple locations
+
+**Solutions:**
+1. Use more specific patterns
+2. Add `near` or `inside` context
+3. Use `occurrence` to select specific match
+
+```json
+{
+  "find": "return",
+  "near": "getUserData",
+  "occurrence": 1
+}
+```
+
+### Issue: Voiceover and Highlight Mismatch
+
+**Problem:** Highlight disappears before voiceover finishes
+
+**Solution:** Always use `voiceoverTiming: "during"` for highlights
+
+```json
+{
+  "type": "highlight",
+  "voiceoverTiming": "during",  // Required!
+  "voiceover": "Long explanation here..."
+}
+```
+
+---
+
+## Complete Example Blueprint
+
+Here's a comprehensive example showing all concepts:
+
+```json
+{
+  "rootFolder": "todo-app",
+  "globalTypingSpeed": 35,
+  "actionDelay": 1200,
+  "defaultVoice": "en-US-AndrewMultilingualNeural",
+  "enableVoiceover": true,
   "actions": [
     {
-      "type": "openFile",
-      "path": "app.js"
+      "type": "createFile",
+      "path": "todo.js",
+      "voiceover": "Let's build a simple todo application from scratch.",
+      "voiceoverTiming": "before"
     },
     {
-      "type": "replace",
-      "find": "var",
-      "with": "const",
-      "occurrence": 1,
-      "voiceover": "Let's modernize this code by using const instead of var"
+      "type": "openFile",
+      "path": "todo.js"
+    },
+    {
+      "type": "writeText",
+      "content": "// Todo Application\n// Demonstrates basic CRUD operations\n\n",
+      "voiceover": "We start with clear documentation.",
+      "voiceoverTiming": "during"
+    },
+    {
+      "type": "writeText",
+      "content": "class TodoList {\n    constructor() {\n        this.todos = [];\n        this.nextId = 1;\n    }\n}\n",
+      "voiceover": "Our TodoList class stores todos and tracks IDs.",
+      "voiceoverTiming": "during",
+      "typingSpeed": 30
+    },
+    {
+      "type": "highlight",
+      "path": "todo.js",
+      "find": "this.todos = [];",
+      "voiceover": "The todos array holds all our todo items.",
+      "voiceoverTiming": "during",
+      "moveCursor": "endOfFile"
     },
     {
       "type": "insert",
-      "after": "const app = express()",
-      "content": "\n// Middleware configuration\napp.use(express.json());\n"
+      "after": "this.nextId = 1;",
+      "content": "\n    addTodo(text) {\n        const todo = {\n            id: this.nextId++,\n            text: text,\n            completed: false\n        };\n        this.todos.push(todo);\n        return todo;\n    }\n",
+      "voiceover": "The addTodo method creates and stores new todos.",
+      "voiceoverTiming": "during",
+      "typingSpeed": 30
+    },
+    {
+      "type": "highlight",
+      "path": "todo.js",
+      "find": "id: this.nextId++",
+      "voiceover": "We auto-increment the ID for each new todo.",
+      "voiceoverTiming": "during",
+      "moveCursor": "endOfFile",
+      "near": "addTodo"
+    },
+    {
+      "type": "writeText",
+      "content": "\n// Create instance and test\nconst myTodos = new TodoList();\nmyTodos.addTodo('Learn JSON blueprints');\nmyTodos.addTodo('Build amazing tutorials');\nconsole.log(myTodos.todos);\n",
+      "voiceover": "Finally, let's test our todo list with some examples.",
+      "voiceoverTiming": "during"
     }
   ]
 }
@@ -507,6 +849,15 @@ Start with `enableVoiceover: false` while testing to speed up iterations.
 
 ---
 
-## License
+## Final Tips
 
-This extension processes JSON blueprints to automate VS Code actions. Created for educational content creators and developers who want to build reproducible project setups.
+1. **Test incrementally**: Build your blueprint action by action
+2. **Use descriptive voiceovers**: Explain the "why", not just the "what"
+3. **Keep actions focused**: One logical step per action
+4. **Mind the pacing**: Balance speed with comprehension
+5. **Preview the flow**: Imagine watching your tutorial as a viewer
+6. **Use comments strategically**: Add them before code blocks for context
+7. **Handle edge cases**: Always specify `moveCursor` for highlights
+8. **Be consistent**: Use similar patterns throughout your blueprint
+
+Remember: The goal is to create a smooth, educational experience that feels like a live coding session with clear explanations!
