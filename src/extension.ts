@@ -40,6 +40,9 @@ interface Blueprint {
 
 let audioHandler: AudioHandler;
 
+// Global decoration type for highlights
+let currentHighlightDecoration: vscode.TextEditorDecorationType | null = null;
+
 export function activate(context: vscode.ExtensionContext) {
   console.log('JSON Project Builder is now active!');
 
@@ -97,6 +100,7 @@ export function activate(context: vscode.ExtensionContext) {
 
       for (let i = 0; i < blueprint.actions.length; i++) {
         const action = blueprint.actions[i];
+        const nextAction = i + 1 < blueprint.actions.length ? blueprint.actions[i + 1] : null;
         const actionName = getActionDescription(action);
         
         statusBarItem.text = `🔨 ${actionName}`;
@@ -123,6 +127,11 @@ export function activate(context: vscode.ExtensionContext) {
 
           await executeAction(action, baseDir, globalTypingSpeed);
 
+          // SMART DETECTION: After highlight, check next action and move cursor if needed
+          if (action.type === 'highlight' && nextAction) {
+            await handlePostHighlight(nextAction);
+          }
+
           if (enableVoiceover && voiceoverTiming === 'after') {
             statusBarItem.text = `🔊 ${action.voiceover!.substring(0, 50)}...`;
             await audioHandler.playVoiceover(action.voiceover!, voiceToUse, 'after');
@@ -147,6 +156,47 @@ export function activate(context: vscode.ExtensionContext) {
   });
 
   context.subscriptions.push(disposable);
+}
+
+/**
+ * Smart post-highlight cursor positioning
+ * Checks if the next action needs cursor repositioning
+ */
+async function handlePostHighlight(nextAction: Action): Promise<void> {
+  const editor = vscode.window.activeTextEditor;
+  if (!editor) return;
+
+  // Check if next action is writeText without location, or insert without specific location
+  const needsRepositioning = 
+    nextAction.type === 'writeText' ||
+    (nextAction.type === 'insert' && !nextAction.after && !nextAction.before && nextAction.at === undefined);
+
+  if (needsRepositioning) {
+    // Move cursor to end of document
+    const document = editor.document;
+    const lastLine = document.lineAt(document.lineCount - 1);
+    const endPosition = lastLine.range.end;
+    
+    editor.selection = new vscode.Selection(endPosition, endPosition);
+    
+    // Add a newline if we're not already at one
+    const lastLineText = lastLine.text;
+    if (lastLineText.trim().length > 0) {
+      await editor.edit(editBuilder => {
+        editBuilder.insert(endPosition, '\n');
+      });
+      
+      // Update cursor position after newline
+      const newEndPosition = editor.document.lineAt(editor.document.lineCount - 1).range.end;
+      editor.selection = new vscode.Selection(newEndPosition, newEndPosition);
+    }
+    
+    // Scroll to cursor
+    editor.revealRange(
+      new vscode.Range(editor.selection.active, editor.selection.active),
+      vscode.TextEditorRevealType.InCenter
+    );
+  }
 }
 
 function getActionDescription(action: Action): string {
@@ -236,32 +286,28 @@ function getTargetIndent(document: vscode.TextDocument, targetLine: number): str
     isBlockOpener = trimmed.endsWith(':');
   } else if (['javascript', 'typescript', 'go', 'cpp', 'csharp'].includes(languageId)) {
     isBlockOpener = trimmed.endsWith('{');
-  } // Add more langs as needed (e.g., 'java' same as C++)
+  }
   
   if (isBlockOpener) {
     return currentTotal + indentChar.repeat(levelSize);
   }
 
   // Otherwise, find the enclosing block's opener indent (sibling level)
-  // Scan upwards for a line with smaller indent
   let scanLine = targetLine - 1;
   while (scanLine >= 0) {
     const prevLine = document.lineAt(scanLine);
     const prevIndentObj = detectIndentation(prevLine.text, options);
     if (prevIndentObj.count < currentCount) {
-      // Found the opener's indent level
       return prevIndentObj.total;
     }
     scanLine--;
   }
 
-  // No enclosing block found, use root level (0)
   return '';
 }
 
 /**
  * Normalize content indentation based on target indentation and lang options
- * Strips common leading whitespace and re-applies target + relative prefixes
  */
 function normalizeIndentation(content: string, targetIndent: string, options: { insertSpaces: boolean; tabSize: number }): string {
   const lines = content.split('\n');
@@ -269,7 +315,6 @@ function normalizeIndentation(content: string, targetIndent: string, options: { 
     return content;
   }
 
-  // Find the minimum prefix among non-empty lines
   let minPrefix: string | null = null;
   for (const line of lines) {
     if (line.trim().length > 0) {
@@ -294,7 +339,6 @@ function normalizeIndentation(content: string, targetIndent: string, options: { 
     const relativePrefix = prefix.substring(minPrefix.length);
     const contentPart = line.trimStart();
     
-    // Ensure relative prefix uses correct char (convert if mismatched)
     let normalizedRelative = relativePrefix.replace(/\t/g, indentChar.repeat(levelSize)).replace(/ {1,3}/g, indentChar.repeat(levelSize / 4 * Math.round(relativePrefix.length / (options.tabSize / 4))));
     
     normalizedLines.push(targetIndent + normalizedRelative + contentPart);
@@ -311,22 +355,20 @@ async function autoFormatDocument(editor: vscode.TextEditor): Promise<void> {
   
   try {
     await vscode.commands.executeCommand('editor.action.formatDocument');
-    await delay(200); // Brief pause for formatting to settle
+    await delay(200);
   } catch (error) {
     console.warn('Formatting failed for language:', editor.document.languageId, error);
-    // Fallback: None, as it's optional for tutorial flow
   }
 }
 
 /**
  * Type text character by character using direct edits for animation
- * Handles newline specially to place cursor correctly, and auto-scrolls to keep cursor visible
  */
 async function typeText(editor: vscode.TextEditor, text: string, speed: number): Promise<void> {
   const startPosition = editor.selection.active;
   let charCount = 0;
-  const scrollInterval = 20; // Reveal every 20 characters to optimize performance
-  const scrollPause = 50; // Brief pause (ms) when scrolling for smoother feel
+  const scrollInterval = 20;
+  const scrollPause = 50;
 
   for (const char of text) {
     const currentPos = editor.selection.active;
@@ -338,7 +380,6 @@ async function typeText(editor: vscode.TextEditor, text: string, speed: number):
       undoStopAfter: false
     });
     
-    // Move cursor forward, special case for newline
     let newPos: vscode.Position;
     if (char === '\n') {
       newPos = new vscode.Position(currentPos.line + 1, 0);
@@ -349,19 +390,16 @@ async function typeText(editor: vscode.TextEditor, text: string, speed: number):
     
     charCount++;
     
-    // Auto-scroll: Reveal the current line/selection to keep cursor in view
-    // Do this on newlines or every N chars; pause briefly if scrolling
     if (char === '\n' || charCount % scrollInterval === 0) {
       editor.revealRange(editor.selection, vscode.TextEditorRevealType.Default);
       if (char !== '\n') {
-        await delay(scrollPause); // Short pause during long-line typing for readability
+        await delay(scrollPause);
       }
     }
     
     await delay(speed);
   }
 
-  // Auto-format after typing for lang-specific indentation
   await autoFormatDocument(editor);
 }
 
@@ -468,19 +506,16 @@ async function handleInsert(action: Action, typingSpeed: number): Promise<void> 
   const document = editor.document;
   const options = getLanguageIndentOptions(document);
 
-  // Insert after a pattern
   if (action.after) {
     await insertAfterPattern(editor, action, typingSpeed, options);
     return;
   }
 
-  // Insert before a pattern
   if (action.before) {
     await insertBeforePattern(editor, action, typingSpeed, options);
     return;
   }
 
-  // Insert at specific line
   if (action.at !== undefined) {
     await insertAtLine(editor, action, typingSpeed, options);
     return;
@@ -490,11 +525,18 @@ async function handleInsert(action: Action, typingSpeed: number): Promise<void> 
 }
 
 /**
- * Handle highlight action: open file, find and select pattern, reveal, then voiceover
+ * Handle highlight action with decorations instead of selections
+ * This prevents the highlighted text from being replaced when typing
  */
 async function handleHighlight(action: Action, baseDir: string): Promise<void> {
-  if (!action.path || !action.find || !action.voiceover) {
-    throw new Error('highlight requires path, find, and voiceover');
+  if (!action.path || !action.find) {
+    throw new Error('highlight requires path and find');
+  }
+
+  // Clear any existing highlight decoration
+  if (currentHighlightDecoration) {
+    currentHighlightDecoration.dispose();
+    currentHighlightDecoration = null;
   }
 
   // Open the file
@@ -517,23 +559,43 @@ async function handleHighlight(action: Action, baseDir: string): Promise<void> {
     throw new Error(`Pattern not found for highlight: "${action.find}"${action.near ? ` near "${action.near}"` : ''}`);
   }
 
-  // For simplicity, highlight the entire line containing the pattern
+  // Highlight the entire line containing the pattern
   const line = document.lineAt(lineResult.line);
   const startPos = line.range.start;
   const endPos = line.range.end;
 
-  // Select and reveal the highlighted range
-  editor.selection = new vscode.Selection(startPos, endPos);
+  // Create decoration for visual highlight (doesn't interfere with typing)
+  currentHighlightDecoration = vscode.window.createTextEditorDecorationType({
+    backgroundColor: 'rgba(255, 255, 0, 0.25)', // Subtle yellow highlight
+    border: '2px solid rgba(255, 255, 0, 0.6)',
+    borderRadius: '3px',
+    isWholeLine: false
+  });
+
+  // Apply the decoration
+  editor.setDecorations(currentHighlightDecoration, [new vscode.Range(startPos, endPos)]);
+
+  // Reveal the range without selecting it
   editor.revealRange(
     new vscode.Range(startPos, endPos),
     vscode.TextEditorRevealType.InCenter
   );
 
-  await delay(300); // Pause to show the highlight
+  // Move cursor to end of highlighted line (but don't select)
+  editor.selection = new vscode.Selection(endPos, endPos);
+
+  // Keep the highlight visible for a moment
+  await delay(800);
+
+  // Clear the decoration after the delay
+  if (currentHighlightDecoration) {
+    currentHighlightDecoration.dispose();
+    currentHighlightDecoration = null;
+  }
 }
 
 /**
- * Insert after a pattern - uses direct edit with proper indentation detection
+ * Insert after a pattern
  */
 async function insertAfterPattern(
   editor: vscode.TextEditor,
@@ -543,7 +605,6 @@ async function insertAfterPattern(
 ): Promise<void> {
   const document = editor.document;
   
-  // Find the line with the pattern (fuzzy match - trim whitespace)
   const lineResult = findPattern(document, action.after!, action.near, action.inside, action.occurrence);
   
   if (!lineResult) {
@@ -553,7 +614,6 @@ async function insertAfterPattern(
   const line = document.lineAt(lineResult.line);
   const endPosition = line.range.end;
   
-  // Reveal the line
   editor.selection = new vscode.Selection(endPosition, endPosition);
   editor.revealRange(
     new vscode.Range(endPosition, endPosition),
@@ -562,31 +622,25 @@ async function insertAfterPattern(
   
   await delay(300);
 
-  // Get target indentation for the new content
   const targetIndent = getTargetIndent(document, lineResult.line);
-  
-  // Normalize the content based on target indentation
   const normalizedContent = normalizeIndentation(action.content!, targetIndent, options);
   
-  // Insert newline first using direct edit
   await editor.edit(editBuilder => {
     editBuilder.insert(endPosition, '\n');
   });
   
   await delay(100);
   
-  // Get the new cursor position (start of the new line) - robust way after edit
   const newLineNum = endPosition.line + 1;
   const newLine = editor.document.lineAt(newLineNum);
   const newLinePosition = newLine.range.start;
   editor.selection = new vscode.Selection(newLinePosition, newLinePosition);
   
-  // Now type the normalized content with animation at the new position
   await typeText(editor, normalizedContent, typingSpeed);
 }
 
 /**
- * Insert before a pattern - uses direct edit
+ * Insert before a pattern
  */
 async function insertBeforePattern(
   editor: vscode.TextEditor,
@@ -596,7 +650,6 @@ async function insertBeforePattern(
 ): Promise<void> {
   const document = editor.document;
   
-  // Find the line with the pattern
   const lineResult = findPattern(document, action.before!, action.near, action.inside, action.occurrence);
   
   if (!lineResult) {
@@ -606,11 +659,9 @@ async function insertBeforePattern(
   const line = document.lineAt(lineResult.line);
   const startPosition = line.range.start;
   
-  // Target indent is the same as the target line's indent
   const targetIndent = detectIndentation(line.text, options).total;
   const normalizedContent = normalizeIndentation(action.content!, targetIndent, options);
   
-  // Reveal the line
   editor.selection = new vscode.Selection(startPosition, startPosition);
   editor.revealRange(
     new vscode.Range(startPosition, startPosition),
@@ -619,10 +670,8 @@ async function insertBeforePattern(
   
   await delay(300);
 
-  // Type the normalized content with animation
   await typeText(editor, normalizedContent, typingSpeed);
   
-  // Add newline to push the original line down
   await editor.edit(editBuilder => {
     editBuilder.insert(editor.selection.active, '\n');
   });
@@ -655,10 +704,8 @@ async function insertAtLine(
   
   await delay(300);
 
-  // Type normalized content
   await typeText(editor, normalizedContent, typingSpeed);
   
-  // Add newline
   await editor.edit(editBuilder => {
     editBuilder.insert(editor.selection.active, '\n');
   });
@@ -678,7 +725,6 @@ async function handleDelete(action: Action): Promise<void> {
   const document = editor.document;
   const text = document.getText();
   
-  // Fuzzy find - trim whitespace from both pattern and text
   const pattern = action.find.trim();
   const lines = text.split('\n');
   let foundIndex = -1;
@@ -698,12 +744,10 @@ async function handleDelete(action: Action): Promise<void> {
     throw new Error(`Text not found: "${action.find}"`);
   }
 
-  // Find the actual occurrence in the original line
   const actualLine = lines[foundLine];
   const patternIndex = actualLine.indexOf(pattern);
   const absoluteIndex = foundIndex + patternIndex;
   
-  // Select the text
   const startPos = document.positionAt(absoluteIndex);
   const endPos = document.positionAt(absoluteIndex + pattern.length);
   
@@ -712,12 +756,10 @@ async function handleDelete(action: Action): Promise<void> {
   
   await delay(500);
 
-  // Delete it
   await editor.edit(editBuilder => {
     editBuilder.delete(new vscode.Range(startPos, endPos));
   });
 
-  // Auto-format after delete
   await autoFormatDocument(editor);
 }
 
@@ -733,7 +775,6 @@ async function handleReplace(action: Action, typingSpeed: number): Promise<void>
   const document = editor.document;
   const text = document.getText();
   
-  // Fuzzy find
   const pattern = action.find.trim();
   const lines = text.split('\n');
   let foundIndex = -1;
@@ -753,12 +794,10 @@ async function handleReplace(action: Action, typingSpeed: number): Promise<void>
     throw new Error(`Text not found: "${action.find}"`);
   }
 
-  // Find the actual occurrence
   const actualLine = lines[foundLine];
   const patternIndex = actualLine.indexOf(pattern);
   const absoluteIndex = foundIndex + patternIndex;
   
-  // Select the text
   const startPos = document.positionAt(absoluteIndex);
   const endPos = document.positionAt(absoluteIndex + pattern.length);
   
@@ -767,14 +806,12 @@ async function handleReplace(action: Action, typingSpeed: number): Promise<void>
   
   await delay(800);
 
-  // Replace it - first delete, then type
   await editor.edit(editBuilder => {
     editBuilder.delete(new vscode.Range(startPos, endPos));
   });
   
   await delay(200);
   
-  // Type the replacement
   await typeText(editor, action.with, typingSpeed);
 }
 
@@ -792,19 +829,15 @@ function findPattern(
   const text = document.getText();
   const lines = text.split('\n');
   
-  // Trim the pattern for fuzzy matching
   const trimmedPattern = pattern.trim();
   
-  // Find all matches of the pattern (fuzzy - ignore leading/trailing whitespace)
   const matches: { line: number; character: number }[] = [];
   
   for (let lineNum = 0; lineNum < lines.length; lineNum++) {
     const lineText = lines[lineNum];
     const trimmedLine = lineText.trim();
     
-    // Check if trimmed line contains the trimmed pattern
     if (trimmedLine.includes(trimmedPattern)) {
-      // Find the actual position in the original line
       const index = lineText.indexOf(trimmedPattern);
       if (index !== -1) {
         matches.push({ line: lineNum, character: index });
@@ -816,18 +849,15 @@ function findPattern(
     return null;
   }
 
-  // If only one match, return it
   if (matches.length === 1) {
     return matches[0];
   }
 
-  // Filter by context if provided
   let filteredMatches = matches;
 
   if (near || inside) {
     const contextPattern = (near || inside)!.trim();
     filteredMatches = matches.filter(match => {
-      // Search within +/- 20 lines for context
       const startLine = Math.max(0, match.line - 20);
       const endLine = Math.min(lines.length - 1, match.line + 20);
       
@@ -844,7 +874,6 @@ function findPattern(
     return null;
   }
 
-  // Return the Nth occurrence (default to first)
   const index = Math.min((occurrence || 1) - 1, filteredMatches.length - 1);
   return filteredMatches[index];
 }
@@ -852,5 +881,11 @@ function findPattern(
 export function deactivate() {
   if (audioHandler) {
     audioHandler.cleanup();
+  }
+  
+  // Clean up any remaining highlight decorations
+  if (currentHighlightDecoration) {
+    currentHighlightDecoration.dispose();
+    currentHighlightDecoration = null;
   }
 }
