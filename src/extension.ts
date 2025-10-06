@@ -178,19 +178,131 @@ async function delay(ms: number): Promise<void> {
 }
 
 /**
- * FIXED: Type text character by character, properly handling escape sequences
+ * Detect indentation of a line (spaces or tabs)
+ */
+function detectIndentation(lineText: string): { char: string; count: number; total: string } {
+  const match = lineText.match(/^(\s+)/);
+  if (!match) {
+    return { char: ' ', count: 0, total: '' };
+  }
+  
+  const whitespace = match[1];
+  const hasTab = whitespace.includes('\t');
+  
+  if (hasTab) {
+    const tabCount = (whitespace.match(/\t/g) || []).length;
+    return { char: '\t', count: tabCount, total: whitespace };
+  } else {
+    return { char: ' ', count: whitespace.length, total: whitespace };
+  }
+}
+
+/**
+ * Get the target indentation for a new insertion after/before/at a given line
+ * For Python: If after a ':' line, increase. Else, find the sibling level by scanning up to the block opener.
+ */
+function getTargetIndent(document: vscode.TextDocument, targetLine: number): string {
+  if (targetLine < 0 || targetLine >= document.lineCount) {
+    return '';
+  }
+
+  const line = document.lineAt(targetLine);
+  const indentObj = detectIndentation(line.text);
+  let currentTotal = indentObj.total;
+  const currentCount = indentObj.count;
+  const indentChar = indentObj.char;
+  const levelSize = indentChar === '\t' ? 1 : 4;
+
+  const trimmed = line.text.trim();
+  const languageId = document.languageId;
+  
+  // If the line ends with a block opener like :, increase indentation
+  if (languageId === 'python' && trimmed.endsWith(':')) {
+    return currentTotal + indentChar.repeat(levelSize);
+  }
+
+  // Otherwise, find the enclosing block's opener indent (sibling level)
+  // Scan upwards for a line with smaller indent
+  let scanLine = targetLine - 1;
+  while (scanLine >= 0) {
+    const prevLine = document.lineAt(scanLine);
+    const prevIndentObj = detectIndentation(prevLine.text);
+    if (prevIndentObj.count < currentCount) {
+      // Found the opener's indent level
+      return prevIndentObj.total;
+    }
+    scanLine--;
+  }
+
+  // No enclosing block found, use root level (0)
+  return '';
+}
+
+/**
+ * Normalize content indentation based on target indentation
+ * Strips common leading whitespace and re-applies target + relative prefixes
+ */
+function normalizeIndentation(content: string, targetIndent: string): string {
+  const lines = content.split('\n');
+  if (lines.length === 0) {
+    return content;
+  }
+
+  // Find the minimum prefix among non-empty lines
+  let minPrefix: string | null = null;
+  for (const line of lines) {
+    if (line.trim().length > 0) {
+      const prefixMatch = line.match(/^\s*/);
+      const prefix = prefixMatch ? prefixMatch[0] : '';
+      if (minPrefix === null || prefix.length < minPrefix!.length) {
+        minPrefix = prefix;
+      }
+    }
+  }
+
+  if (minPrefix === null) {
+    minPrefix = '';
+  }
+
+  // Normalize each line
+  const normalizedLines: string[] = [];
+  for (const line of lines) {
+    const prefixMatch = line.match(/^\s*/);
+    const prefix = prefixMatch ? prefixMatch[0] : '';
+    const relativePrefix = prefix.substring(minPrefix.length);
+    const contentPart = line.trimStart();
+    normalizedLines.push(targetIndent + relativePrefix + contentPart);
+  }
+
+  return normalizedLines.join('\n');
+}
+
+/**
+ * Type text character by character using direct edits for animation
+ * Handles newline specially to place cursor correctly
  */
 async function typeText(editor: vscode.TextEditor, text: string, speed: number): Promise<void> {
-  // Process escape sequences BEFORE iterating character by character
-  // This converts JSON strings like "line1\n    line2" into actual newlines and spaces
-  const processedText = text
-    .replace(/\\n/g, '\n')  // Convert \n to actual newline
-    .replace(/\\t/g, '\t')  // Convert \t to actual tab
-    .replace(/\\r/g, '\r')  // Convert \r to carriage return
-    .replace(/\\\\/g, '\\'); // Convert \\ to single backslash
+  const startPosition = editor.selection.active;
   
-  for (const char of processedText) {
-    await vscode.commands.executeCommand('type', { text: char });
+  for (const char of text) {
+    const currentPos = editor.selection.active;
+    
+    await editor.edit(editBuilder => {
+      editBuilder.insert(currentPos, char);
+    }, {
+      undoStopBefore: false,
+      undoStopAfter: false
+    });
+    
+    // Move cursor forward, special case for newline
+    let newPos: vscode.Position;
+    if (char === '\n') {
+      newPos = new vscode.Position(currentPos.line + 1, 0);
+    } else {
+      newPos = currentPos.translate(0, 1);
+    }
+    editor.selection = new vscode.Selection(newPos, newPos);
+    
     await delay(speed);
   }
 }
@@ -313,8 +425,7 @@ async function handleInsert(action: Action, typingSpeed: number): Promise<void> 
 }
 
 /**
- * Insert after a pattern - simulates pressing Enter at end of line
- * Content should NOT have leading newline or spaces - VS Code auto-indents!
+ * Insert after a pattern - uses direct edit with proper indentation detection
  */
 async function insertAfterPattern(
   editor: vscode.TextEditor,
@@ -323,7 +434,7 @@ async function insertAfterPattern(
 ): Promise<void> {
   const document = editor.document;
   
-  // Find the line with the pattern
+  // Find the line with the pattern (fuzzy match - trim whitespace)
   const lineResult = findPattern(document, action.after!, action.near, action.inside, action.occurrence);
   
   if (!lineResult) {
@@ -331,12 +442,10 @@ async function insertAfterPattern(
   }
 
   const line = document.lineAt(lineResult.line);
-  
-  // Move cursor to END of the line
   const endPosition = line.range.end;
-  editor.selection = new vscode.Selection(endPosition, endPosition);
   
   // Reveal the line
+  editor.selection = new vscode.Selection(endPosition, endPosition);
   editor.revealRange(
     new vscode.Range(endPosition, endPosition),
     vscode.TextEditorRevealType.InCenter
@@ -344,18 +453,31 @@ async function insertAfterPattern(
   
   await delay(300);
 
-  // Press Enter - VS Code auto-indents based on the line above!
-  await vscode.commands.executeCommand('type', { text: '\n' });
+  // Get target indentation for the new content
+  const targetIndent = getTargetIndent(document, lineResult.line);
+  
+  // Normalize the content based on target indentation
+  const normalizedContent = normalizeIndentation(action.content!, targetIndent);
+  
+  // Insert newline first using direct edit
+  await editor.edit(editBuilder => {
+    editBuilder.insert(endPosition, '\n');
+  });
+  
   await delay(100);
-
-  // Type the content - it should NOT have leading spaces!
-  // VS Code already indented after pressing Enter
-  await typeText(editor, action.content!, typingSpeed);
+  
+  // Get the new cursor position (start of the new line) - robust way after edit
+  const newLineNum = endPosition.line + 1;
+  const newLine = editor.document.lineAt(newLineNum);
+  const newLinePosition = newLine.range.start;
+  editor.selection = new vscode.Selection(newLinePosition, newLinePosition);
+  
+  // Now type the normalized content with animation at the new position
+  await typeText(editor, normalizedContent, typingSpeed);
 }
 
 /**
- * Insert before a pattern - simulates creating a new line above
- * Content should NOT have leading newline or spaces
+ * Insert before a pattern - uses direct edit
  */
 async function insertBeforePattern(
   editor: vscode.TextEditor,
@@ -372,12 +494,14 @@ async function insertBeforePattern(
   }
 
   const line = document.lineAt(lineResult.line);
-  
-  // Move cursor to START of the line
   const startPosition = line.range.start;
-  editor.selection = new vscode.Selection(startPosition, startPosition);
+  
+  // Target indent is the same as the target line's indent
+  const targetIndent = detectIndentation(line.text).total;
+  const normalizedContent = normalizeIndentation(action.content!, targetIndent);
   
   // Reveal the line
+  editor.selection = new vscode.Selection(startPosition, startPosition);
   editor.revealRange(
     new vscode.Range(startPosition, startPosition),
     vscode.TextEditorRevealType.InCenter
@@ -385,11 +509,14 @@ async function insertBeforePattern(
   
   await delay(300);
 
-  // Type the content first (without leading spaces)
-  await typeText(editor, action.content!, typingSpeed);
+  // Type the normalized content with animation
+  await typeText(editor, normalizedContent, typingSpeed);
   
-  // Then press Enter to move the original line down
-  await vscode.commands.executeCommand('type', { text: '\n' });
+  // Add newline to push the original line down
+  await editor.edit(editBuilder => {
+    editBuilder.insert(editor.selection.active, '\n');
+  });
+  
   await delay(100);
 }
 
@@ -405,10 +532,11 @@ async function insertAtLine(
   const lineNumber = Math.max(0, Math.min(action.at!, document.lineCount - 1));
   const line = document.lineAt(lineNumber);
   
-  // Move cursor to start of line
   const position = line.range.start;
-  editor.selection = new vscode.Selection(position, position);
+  const targetIndent = detectIndentation(line.text).total;
+  const normalizedContent = normalizeIndentation(action.content!, targetIndent);
   
+  editor.selection = new vscode.Selection(position, position);
   editor.revealRange(
     new vscode.Range(position, position),
     vscode.TextEditorRevealType.InCenter
@@ -416,11 +544,14 @@ async function insertAtLine(
   
   await delay(300);
 
-  // Type content
-  await typeText(editor, action.content!, typingSpeed);
+  // Type normalized content
+  await typeText(editor, normalizedContent, typingSpeed);
   
-  // Press Enter
-  await vscode.commands.executeCommand('type', { text: '\n' });
+  // Add newline
+  await editor.edit(editBuilder => {
+    editBuilder.insert(editor.selection.active, '\n');
+  });
+  
   await delay(100);
 }
 
@@ -436,15 +567,34 @@ async function handleDelete(action: Action): Promise<void> {
   const document = editor.document;
   const text = document.getText();
   
-  // Find the text to delete
-  const index = text.indexOf(action.find);
-  if (index === -1) {
+  // Fuzzy find - trim whitespace from both pattern and text
+  const pattern = action.find.trim();
+  const lines = text.split('\n');
+  let foundIndex = -1;
+  let foundLine = -1;
+  
+  for (let i = 0; i < lines.length; i++) {
+    const trimmedLine = lines[i].trim();
+    if (trimmedLine.includes(pattern)) {
+      const originalLine = lines[i];
+      foundIndex = text.indexOf(originalLine);
+      foundLine = i;
+      break;
+    }
+  }
+  
+  if (foundIndex === -1) {
     throw new Error(`Text not found: "${action.find}"`);
   }
 
+  // Find the actual occurrence in the original line
+  const actualLine = lines[foundLine];
+  const patternIndex = actualLine.indexOf(pattern);
+  const absoluteIndex = foundIndex + patternIndex;
+  
   // Select the text
-  const startPos = document.positionAt(index);
-  const endPos = document.positionAt(index + action.find.length);
+  const startPos = document.positionAt(absoluteIndex);
+  const endPos = document.positionAt(absoluteIndex + pattern.length);
   
   editor.selection = new vscode.Selection(startPos, endPos);
   editor.revealRange(new vscode.Range(startPos, endPos));
@@ -469,29 +619,53 @@ async function handleReplace(action: Action, typingSpeed: number): Promise<void>
   const document = editor.document;
   const text = document.getText();
   
-  // Find the text to replace
-  const index = text.indexOf(action.find);
-  if (index === -1) {
+  // Fuzzy find
+  const pattern = action.find.trim();
+  const lines = text.split('\n');
+  let foundIndex = -1;
+  let foundLine = -1;
+  
+  for (let i = 0; i < lines.length; i++) {
+    const trimmedLine = lines[i].trim();
+    if (trimmedLine.includes(pattern)) {
+      const originalLine = lines[i];
+      foundIndex = text.indexOf(originalLine);
+      foundLine = i;
+      break;
+    }
+  }
+  
+  if (foundIndex === -1) {
     throw new Error(`Text not found: "${action.find}"`);
   }
 
+  // Find the actual occurrence
+  const actualLine = lines[foundLine];
+  const patternIndex = actualLine.indexOf(pattern);
+  const absoluteIndex = foundIndex + patternIndex;
+  
   // Select the text
-  const startPos = document.positionAt(index);
-  const endPos = document.positionAt(index + action.find.length);
+  const startPos = document.positionAt(absoluteIndex);
+  const endPos = document.positionAt(absoluteIndex + pattern.length);
   
   editor.selection = new vscode.Selection(startPos, endPos);
   editor.revealRange(new vscode.Range(startPos, endPos));
   
   await delay(800);
 
-  // Replace it
+  // Replace it - first delete, then type
   await editor.edit(editBuilder => {
-    editBuilder.replace(new vscode.Range(startPos, endPos), action.with!);
+    editBuilder.delete(new vscode.Range(startPos, endPos));
   });
+  
+  await delay(200);
+  
+  // Type the replacement
+  await typeText(editor, action.with, typingSpeed);
 }
 
 /**
- * Find a pattern in the document with context awareness
+ * Find a pattern in the document with context awareness and fuzzy matching
  */
 function findPattern(
   document: vscode.TextDocument,
@@ -504,15 +678,23 @@ function findPattern(
   const text = document.getText();
   const lines = text.split('\n');
   
-  // Find all matches of the pattern
+  // Trim the pattern for fuzzy matching
+  const trimmedPattern = pattern.trim();
+  
+  // Find all matches of the pattern (fuzzy - ignore leading/trailing whitespace)
   const matches: { line: number; character: number }[] = [];
   
   for (let lineNum = 0; lineNum < lines.length; lineNum++) {
     const lineText = lines[lineNum];
-    const index = lineText.indexOf(pattern);
+    const trimmedLine = lineText.trim();
     
-    if (index !== -1) {
-      matches.push({ line: lineNum, character: index });
+    // Check if trimmed line contains the trimmed pattern
+    if (trimmedLine.includes(trimmedPattern)) {
+      // Find the actual position in the original line
+      const index = lineText.indexOf(trimmedPattern);
+      if (index !== -1) {
+        matches.push({ line: lineNum, character: index });
+      }
     }
   }
 
@@ -529,14 +711,14 @@ function findPattern(
   let filteredMatches = matches;
 
   if (near || inside) {
-    const contextPattern = near || inside;
+    const contextPattern = (near || inside)!.trim();
     filteredMatches = matches.filter(match => {
       // Search within +/- 20 lines for context
       const startLine = Math.max(0, match.line - 20);
       const endLine = Math.min(lines.length - 1, match.line + 20);
       
       for (let i = startLine; i <= endLine; i++) {
-        if (lines[i].indexOf(contextPattern!) !== -1) {
+        if (lines[i].trim().includes(contextPattern)) {
           return true;
         }
       }
