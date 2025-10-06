@@ -281,11 +281,14 @@ function normalizeIndentation(content: string, targetIndent: string): string {
 
 /**
  * Type text character by character using direct edits for animation
- * Handles newline specially to place cursor correctly
+ * Handles newline specially to place cursor correctly, and auto-scrolls to keep cursor visible
  */
 async function typeText(editor: vscode.TextEditor, text: string, speed: number): Promise<void> {
   const startPosition = editor.selection.active;
-  
+  let charCount = 0;
+  const scrollInterval = 20; // Reveal every 20 characters to optimize performance
+  const scrollPause = 50; // Brief pause (ms) when scrolling for smoother feel
+
   for (const char of text) {
     const currentPos = editor.selection.active;
     
@@ -304,6 +307,17 @@ async function typeText(editor: vscode.TextEditor, text: string, speed: number):
       newPos = currentPos.translate(0, 1);
     }
     editor.selection = new vscode.Selection(newPos, newPos);
+    
+    charCount++;
+    
+    // Auto-scroll: Reveal the current line/selection to keep cursor in view
+    // Do this on newlines or every N chars; pause briefly if scrolling
+    if (char === '\n' || charCount % scrollInterval === 0) {
+      editor.revealRange(editor.selection, vscode.TextEditorRevealType.Default);
+      if (char !== '\n') {
+        await delay(scrollPause); // Short pause during long-line typing for readability
+      }
+    }
     
     await delay(speed);
   }
