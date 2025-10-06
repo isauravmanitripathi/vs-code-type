@@ -1,180 +1,198 @@
-# JSON Blueprint Quick Guide
+# JSON Project Builder - Quick Guide
+
+## What Is It?
+A VS Code extension that automates project creation and generates coding tutorials with AI voiceovers using JSON blueprints.
+
+---
 
 ## Basic Structure
 
 ```json
 {
-  "rootFolder": "my-project",
+  "rootFolder": "project-name",
   "globalTypingSpeed": 35,
-  "actionDelay": 1200,
+  "actionDelay": 1000,
   "defaultVoice": "en-US-AndrewMultilingualNeural",
   "enableVoiceover": true,
-  "actions": [...]
+  "actions": [
+    // Your actions go here
+  ]
 }
 ```
 
-**Settings:**
-- `globalTypingSpeed`: 25-40 (milliseconds per character)
-- `actionDelay`: 800-1500 (pause between actions in ms)
-- `enableVoiceover`: true/false for narration
-
 ---
 
-## Action Types
+## Core Actions
 
-### 1. Create & Open Files
+### 1. Create Folders & Files
+
+**Important:** Always create folders BEFORE creating files inside them!
 
 ```json
-{"type": "createFolder", "path": "src/components"},
-{"type": "createFile", "path": "src/index.js"},
-{"type": "openFile", "path": "src/index.js"}
+{
+  "type": "createFolder",
+  "path": "src",
+  "voiceover": "Creating source folder"
+}
 ```
 
-### 2. Write Text
+```json
+{
+  "type": "createFile",
+  "path": "src/main.py",
+  "voiceover": "Creating main Python file"
+}
+```
 
-Writes at current cursor position. Always write complete, working code blocks.
+### 2. Open & Write
+
+```json
+{
+  "type": "openFile",
+  "path": "src/main.py",
+  "voiceover": "Opening the main file"
+}
+```
 
 ```json
 {
   "type": "writeText",
-  "content": "function hello() {\n  console.log('Hi');\n}\n",
-  "voiceover": "Creating a simple function",
-  "voiceoverTiming": "during"
+  "content": "print('Hello World')\n",
+  "voiceover": "Writing our first line of code",
+  "typingSpeed": 30
 }
 ```
 
-### 3. Insert Code
-
-Insert at specific locations using pattern matching.
-
-```json
-{
-  "type": "insert",
-  "after": "import React from 'react';",
-  "content": "import { useState } from 'react';\n",
-  "near": "optional context for finding pattern",
-  "occurrence": 1
-}
-```
-
-Use `after`, `before`, or `at: lineNumber` to specify location.
-
-### 4. Highlight & Explain
+### 3. Highlight Code
 
 ```json
 {
   "type": "highlight",
-  "path": "src/index.js",
-  "find": "useState(0)",
-  "voiceover": "Notice how we initialize state here",
-  "voiceoverTiming": "during",
-  "moveCursor": "endOfFile"
+  "path": "src/main.py",
+  "find": "print('Hello World')",
+  "voiceover": "This line prints Hello World to the console"
 }
 ```
 
-**Important:** Always specify `moveCursor` to control what happens after highlighting:
-- `"endOfFile"` - Move to end of file
-- `"newLineAfter"` - Add line after highlight
-- `"sameLine"` - Stay on highlighted line
-- `"stay"` - Don't move cursor
+---
 
-### 5. Delete & Replace
+## Valid Highlight Properties
 
-```json
-{"type": "delete", "find": "console.log('debug');"},
+✅ **Allowed:**
+- `path` (required)
+- `find` (required)
+- `voiceover` (required)
+- `near` (optional - for disambiguation)
+- `inside` (optional - for disambiguation)
+- `occurrence` (optional - which match to highlight)
+- `voice` (optional - override default voice)
+- `voiceoverTiming` (optional - "before", "during", "after")
 
-{
-  "type": "replace",
-  "find": "let x = 5;",
-  "with": "const x = 10;"
-}
-```
+❌ **NOT Allowed:**
+- `moveCursor` - This property doesn't exist!
+- Any other undocumented properties
 
 ---
 
 ## Voiceover Timing
 
-- `"before"`: Speak, then execute action
-- `"during"`: Speak while action runs (typing/highlighting)
-- `"after"`: Execute, then speak
-
----
-
-## Best Practices
-
-**1. Write complete code blocks**
-```json
-// GOOD - complete function
-{"content": "function add(a, b) {\n  return a + b;\n}\n"}
-
-// BAD - incomplete code
-{"content": "function add(a, b) {\n"}
-```
-
-**2. Add spacing BEFORE sections**
-```json
-{"content": "\n\n// New section\nfunction next() {}\n"}
-```
-
-**3. Use specific patterns for finding**
-```json
-// GOOD - unique pattern
-{"find": "class UserService {"}
-
-// BAD - too generic
-{"find": "{"}
-```
-
-**4. Use `near` for disambiguation**
 ```json
 {
-  "find": "return result;",
-  "near": "calculateTotal function"
+  "voiceover": "Explanation text",
+  "voiceoverTiming": "before"  // Options: "before", "during", "after"
 }
 ```
 
-**5. Always control cursor after highlights**
+- **`"before"`** - Speak, then execute action (default)
+- **`"during"`** - Speak while action executes
+- **`"after"`** - Execute action, then speak
+
+---
+
+## Common Mistakes
+
+### ❌ Wrong: File before folder
+```json
+{
+  "type": "createFile",
+  "path": "Python/solution.py"  // Error! Python folder doesn't exist
+}
+```
+
+### ✅ Correct: Folder first
+```json
+{
+  "type": "createFolder",
+  "path": "Python"
+},
+{
+  "type": "createFile",
+  "path": "Python/solution.py"
+}
+```
+
+### ❌ Wrong: Invalid property
 ```json
 {
   "type": "highlight",
-  "find": "something",
-  "moveCursor": "endOfFile"  // Always specify this
+  "find": "code",
+  "moveCursor": "newLine"  // This doesn't exist!
+}
+```
+
+### ✅ Correct: Valid properties only
+```json
+{
+  "type": "highlight",
+  "path": "main.py",
+  "find": "code",
+  "voiceover": "Explanation"
 }
 ```
 
 ---
 
-## Quick Example
+## Complete Example
 
 ```json
 {
-  "rootFolder": "hello-world",
+  "rootFolder": "hello-python",
   "globalTypingSpeed": 35,
   "actionDelay": 1000,
+  "defaultVoice": "en-US-AndrewMultilingualNeural",
+  "enableVoiceover": true,
   "actions": [
     {
+      "type": "createFolder",
+      "path": "src",
+      "voiceover": "First, we create a source folder"
+    },
+    {
       "type": "createFile",
-      "path": "app.js",
-      "voiceover": "Creating our application file",
-      "voiceoverTiming": "before"
+      "path": "src/main.py",
+      "voiceover": "Now let's create our main Python file"
     },
     {
       "type": "openFile",
-      "path": "app.js"
+      "path": "src/main.py",
+      "voiceover": "Opening the file to add our code"
     },
     {
       "type": "writeText",
-      "content": "// Hello World App\n\nfunction greet(name) {\n  return `Hello, ${name}!`;\n}\n\nconsole.log(greet('World'));\n",
-      "voiceover": "Writing a simple greeting function",
+      "content": "def greet(name):\n    return f'Hello, {name}!'\n\n",
+      "voiceover": "We define a simple greeting function",
       "voiceoverTiming": "during"
     },
     {
+      "type": "writeText",
+      "content": "print(greet('World'))\n",
+      "voiceover": "And we call it to print Hello World"
+    },
+    {
       "type": "highlight",
-      "path": "app.js",
-      "find": "return `Hello, ${name}!`;",
-      "voiceover": "Notice how we use template literals for string interpolation",
-      "voiceoverTiming": "during",
-      "moveCursor": "endOfFile"
+      "path": "src/main.py",
+      "find": "def greet(name):",
+      "voiceover": "This function takes a name parameter and returns a greeting"
     }
   ]
 }
@@ -182,10 +200,31 @@ Use `after`, `before`, or `at: lineNumber` to specify location.
 
 ---
 
-## Common Issues
+## Quick Tips
 
-**Pattern not found?** Use more specific patterns or add `near` context.
+1. **Always create folders before files inside them**
+2. **Write code top to bottom** - use `writeText` sequentially
+3. **Highlight after writing** - highlight code only after it's been written
+4. **Check spelling** - property names must be exact (no `moveCursor`, etc.)
+5. **Use proper paths** - relative to `rootFolder`
+6. **Test without voiceover first** - set `"enableVoiceover": false` while testing
 
-**Wrong cursor position?** Always set `moveCursor` on highlight actions.
+---
 
-**Multiple matches?** Use `occurrence: 2` to select the second match.
+## Running Your Blueprint
+
+1. Open VS Code
+2. Press `Ctrl+Shift+P` (Windows/Linux) or `Cmd+Shift+P` (Mac)
+3. Type: "JSON Project Builder: Build from JSON"
+4. Select your JSON file
+5. Watch it build!
+
+---
+
+## Need More?
+
+Check the complete documentation for advanced features like:
+- `insert` - Add code at specific locations
+- `replace` - Find and replace text
+- `delete` - Remove code
+- Pattern matching with `near`, `inside`, `occurrence`
