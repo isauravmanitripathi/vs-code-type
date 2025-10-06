@@ -180,12 +180,23 @@ async function delay(ms: number): Promise<void> {
 }
 
 /**
- * Detect indentation of a line (spaces or tabs)
+ * Get language-specific indentation options from VS Code config
  */
-function detectIndentation(lineText: string): { char: string; count: number; total: string } {
+function getLanguageIndentOptions(document: vscode.TextDocument): { insertSpaces: boolean; tabSize: number } {
+  const config = vscode.workspace.getConfiguration('editor', document.uri);
+  return {
+    insertSpaces: config.get<boolean>('insertSpaces', true),
+    tabSize: config.get<number>('tabSize', 4)
+  };
+}
+
+/**
+ * Detect indentation of a line (spaces or tabs), respecting language config
+ */
+function detectIndentation(lineText: string, options: { insertSpaces: boolean; tabSize: number }): { char: string; count: number; total: string } {
   const match = lineText.match(/^(\s+)/);
   if (!match) {
-    return { char: ' ', count: 0, total: '' };
+    return { char: options.insertSpaces ? ' ' : '\t', count: 0, total: '' };
   }
   
   const whitespace = match[1];
@@ -201,7 +212,7 @@ function detectIndentation(lineText: string): { char: string; count: number; tot
 
 /**
  * Get the target indentation for a new insertion after/before/at a given line
- * For Python: If after a ':' line, increase. Else, find the sibling level by scanning up to the block opener.
+ * Enhanced for multi-lang: Uses langId for block openers (e.g., '{' for C++/Go, ':' for Python/Ruby)
  */
 function getTargetIndent(document: vscode.TextDocument, targetLine: number): string {
   if (targetLine < 0 || targetLine >= document.lineCount) {
@@ -209,17 +220,25 @@ function getTargetIndent(document: vscode.TextDocument, targetLine: number): str
   }
 
   const line = document.lineAt(targetLine);
-  const indentObj = detectIndentation(line.text);
-  let currentTotal = indentObj.total;
+  const options = getLanguageIndentOptions(document);
+  const indentObj = detectIndentation(line.text, options);
+  const currentTotal = indentObj.total;
   const currentCount = indentObj.count;
-  const indentChar = indentObj.char;
-  const levelSize = indentChar === '\t' ? 1 : 4;
+  const indentChar = options.insertSpaces ? ' ' : '\t';
+  const levelSize = options.insertSpaces ? options.tabSize : 1;
 
   const trimmed = line.text.trim();
   const languageId = document.languageId;
   
-  // If the line ends with a block opener like :, increase indentation
-  if (languageId === 'python' && trimmed.endsWith(':')) {
+  // Lang-specific block openers
+  let isBlockOpener = false;
+  if (languageId === 'python' || languageId === 'ruby') {
+    isBlockOpener = trimmed.endsWith(':');
+  } else if (['javascript', 'typescript', 'go', 'cpp', 'csharp'].includes(languageId)) {
+    isBlockOpener = trimmed.endsWith('{');
+  } // Add more langs as needed (e.g., 'java' same as C++)
+  
+  if (isBlockOpener) {
     return currentTotal + indentChar.repeat(levelSize);
   }
 
@@ -228,7 +247,7 @@ function getTargetIndent(document: vscode.TextDocument, targetLine: number): str
   let scanLine = targetLine - 1;
   while (scanLine >= 0) {
     const prevLine = document.lineAt(scanLine);
-    const prevIndentObj = detectIndentation(prevLine.text);
+    const prevIndentObj = detectIndentation(prevLine.text, options);
     if (prevIndentObj.count < currentCount) {
       // Found the opener's indent level
       return prevIndentObj.total;
@@ -241,10 +260,10 @@ function getTargetIndent(document: vscode.TextDocument, targetLine: number): str
 }
 
 /**
- * Normalize content indentation based on target indentation
+ * Normalize content indentation based on target indentation and lang options
  * Strips common leading whitespace and re-applies target + relative prefixes
  */
-function normalizeIndentation(content: string, targetIndent: string): string {
+function normalizeIndentation(content: string, targetIndent: string, options: { insertSpaces: boolean; tabSize: number }): string {
   const lines = content.split('\n');
   if (lines.length === 0) {
     return content;
@@ -266,17 +285,37 @@ function normalizeIndentation(content: string, targetIndent: string): string {
     minPrefix = '';
   }
 
-  // Normalize each line
+  const indentChar = options.insertSpaces ? ' ' : '\t';
+  const levelSize = options.insertSpaces ? options.tabSize : 1;
   const normalizedLines: string[] = [];
   for (const line of lines) {
     const prefixMatch = line.match(/^\s*/);
     const prefix = prefixMatch ? prefixMatch[0] : '';
     const relativePrefix = prefix.substring(minPrefix.length);
     const contentPart = line.trimStart();
-    normalizedLines.push(targetIndent + relativePrefix + contentPart);
+    
+    // Ensure relative prefix uses correct char (convert if mismatched)
+    let normalizedRelative = relativePrefix.replace(/\t/g, indentChar.repeat(levelSize)).replace(/ {1,3}/g, indentChar.repeat(levelSize / 4 * Math.round(relativePrefix.length / (options.tabSize / 4))));
+    
+    normalizedLines.push(targetIndent + normalizedRelative + contentPart);
   }
 
   return normalizedLines.join('\n');
+}
+
+/**
+ * Auto-format the current document using VS Code's language-specific formatter
+ */
+async function autoFormatDocument(editor: vscode.TextEditor): Promise<void> {
+  if (!editor) return;
+  
+  try {
+    await vscode.commands.executeCommand('editor.action.formatDocument');
+    await delay(200); // Brief pause for formatting to settle
+  } catch (error) {
+    console.warn('Formatting failed for language:', editor.document.languageId, error);
+    // Fallback: None, as it's optional for tutorial flow
+  }
 }
 
 /**
@@ -321,6 +360,9 @@ async function typeText(editor: vscode.TextEditor, text: string, speed: number):
     
     await delay(speed);
   }
+
+  // Auto-format after typing for lang-specific indentation
+  await autoFormatDocument(editor);
 }
 
 async function executeAction(action: Action, baseDir: string, globalTypingSpeed: number): Promise<void> {
@@ -423,21 +465,24 @@ async function handleInsert(action: Action, typingSpeed: number): Promise<void> 
     throw new Error('No active editor or content missing');
   }
 
+  const document = editor.document;
+  const options = getLanguageIndentOptions(document);
+
   // Insert after a pattern
   if (action.after) {
-    await insertAfterPattern(editor, action, typingSpeed);
+    await insertAfterPattern(editor, action, typingSpeed, options);
     return;
   }
 
   // Insert before a pattern
   if (action.before) {
-    await insertBeforePattern(editor, action, typingSpeed);
+    await insertBeforePattern(editor, action, typingSpeed, options);
     return;
   }
 
   // Insert at specific line
   if (action.at !== undefined) {
-    await insertAtLine(editor, action, typingSpeed);
+    await insertAtLine(editor, action, typingSpeed, options);
     return;
   }
 
@@ -493,7 +538,8 @@ async function handleHighlight(action: Action, baseDir: string): Promise<void> {
 async function insertAfterPattern(
   editor: vscode.TextEditor,
   action: Action,
-  typingSpeed: number
+  typingSpeed: number,
+  options: { insertSpaces: boolean; tabSize: number }
 ): Promise<void> {
   const document = editor.document;
   
@@ -520,7 +566,7 @@ async function insertAfterPattern(
   const targetIndent = getTargetIndent(document, lineResult.line);
   
   // Normalize the content based on target indentation
-  const normalizedContent = normalizeIndentation(action.content!, targetIndent);
+  const normalizedContent = normalizeIndentation(action.content!, targetIndent, options);
   
   // Insert newline first using direct edit
   await editor.edit(editBuilder => {
@@ -545,7 +591,8 @@ async function insertAfterPattern(
 async function insertBeforePattern(
   editor: vscode.TextEditor,
   action: Action,
-  typingSpeed: number
+  typingSpeed: number,
+  options: { insertSpaces: boolean; tabSize: number }
 ): Promise<void> {
   const document = editor.document;
   
@@ -560,8 +607,8 @@ async function insertBeforePattern(
   const startPosition = line.range.start;
   
   // Target indent is the same as the target line's indent
-  const targetIndent = detectIndentation(line.text).total;
-  const normalizedContent = normalizeIndentation(action.content!, targetIndent);
+  const targetIndent = detectIndentation(line.text, options).total;
+  const normalizedContent = normalizeIndentation(action.content!, targetIndent, options);
   
   // Reveal the line
   editor.selection = new vscode.Selection(startPosition, startPosition);
@@ -589,15 +636,16 @@ async function insertBeforePattern(
 async function insertAtLine(
   editor: vscode.TextEditor,
   action: Action,
-  typingSpeed: number
+  typingSpeed: number,
+  options: { insertSpaces: boolean; tabSize: number }
 ): Promise<void> {
   const document = editor.document;
   const lineNumber = Math.max(0, Math.min(action.at!, document.lineCount - 1));
   const line = document.lineAt(lineNumber);
   
   const position = line.range.start;
-  const targetIndent = detectIndentation(line.text).total;
-  const normalizedContent = normalizeIndentation(action.content!, targetIndent);
+  const targetIndent = detectIndentation(line.text, options).total;
+  const normalizedContent = normalizeIndentation(action.content!, targetIndent, options);
   
   editor.selection = new vscode.Selection(position, position);
   editor.revealRange(
@@ -668,6 +716,9 @@ async function handleDelete(action: Action): Promise<void> {
   await editor.edit(editBuilder => {
     editBuilder.delete(new vscode.Range(startPos, endPos));
   });
+
+  // Auto-format after delete
+  await autoFormatDocument(editor);
 }
 
 /**
