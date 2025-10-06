@@ -27,6 +27,9 @@ interface Action {
   voiceover?: string;
   voice?: string;
   voiceoverTiming?: 'before' | 'after' | 'during';
+  
+  // Highlight cursor control
+  moveCursor?: 'newLineAfter' | 'newLineBefore' | 'sameLine' | 'endOfFile' | 'stay' | 'nextBlankLine';
 }
 
 interface Blueprint {
@@ -110,35 +113,39 @@ export function activate(context: vscode.ExtensionContext) {
         });
 
         try {
-          const voiceoverTiming = action.voiceover ? (action.voiceoverTiming || 'before') : null;
-          const voiceToUse = action.voice || defaultVoice;
+          // Special handling for highlight actions with voiceover
+          if (action.type === 'highlight') {
+            await handleHighlightWithVoiceover(action, baseDir, enableVoiceover, defaultVoice, statusBarItem);
+            
+            // Handle cursor positioning after highlight
+            await handlePostHighlight(action, nextAction);
+          } else {
+            // Normal action handling
+            const voiceoverTiming = action.voiceover ? (action.voiceoverTiming || 'before') : null;
+            const voiceToUse = action.voice || defaultVoice;
 
-          if (enableVoiceover && voiceoverTiming === 'before') {
-            statusBarItem.text = `🔊 ${action.voiceover!.substring(0, 50)}...`;
-            await audioHandler.playVoiceover(action.voiceover!, voiceToUse, 'before');
-          }
+            if (enableVoiceover && voiceoverTiming === 'before') {
+              statusBarItem.text = `🔊 ${action.voiceover!.substring(0, 50)}...`;
+              await audioHandler.playVoiceover(action.voiceover!, voiceToUse, 'before');
+            }
 
-          let duringAudioPromise: Promise<void> | null = null;
-          if (enableVoiceover && voiceoverTiming === 'during') {
-            statusBarItem.text = `🔊 ${action.voiceover!.substring(0, 50)}...`;
-            duringAudioPromise = audioHandler.playVoiceover(action.voiceover!, voiceToUse, 'during');
-            await delay(100);
-          }
+            let duringAudioPromise: Promise<void> | null = null;
+            if (enableVoiceover && voiceoverTiming === 'during') {
+              statusBarItem.text = `🔊 ${action.voiceover!.substring(0, 50)}...`;
+              duringAudioPromise = audioHandler.playVoiceover(action.voiceover!, voiceToUse, 'during');
+              await delay(100);
+            }
 
-          await executeAction(action, baseDir, globalTypingSpeed);
+            await executeAction(action, baseDir, globalTypingSpeed);
 
-          // SMART DETECTION: After highlight, check next action and move cursor if needed
-          if (action.type === 'highlight' && nextAction) {
-            await handlePostHighlight(nextAction);
-          }
+            if (enableVoiceover && voiceoverTiming === 'after') {
+              statusBarItem.text = `🔊 ${action.voiceover!.substring(0, 50)}...`;
+              await audioHandler.playVoiceover(action.voiceover!, voiceToUse, 'after');
+            }
 
-          if (enableVoiceover && voiceoverTiming === 'after') {
-            statusBarItem.text = `🔊 ${action.voiceover!.substring(0, 50)}...`;
-            await audioHandler.playVoiceover(action.voiceover!, voiceToUse, 'after');
-          }
-
-          if (duringAudioPromise) {
-            await duringAudioPromise;
+            if (duringAudioPromise) {
+              await duringAudioPromise;
+            }
           }
           
           await delay(actionDelay);
@@ -159,43 +166,232 @@ export function activate(context: vscode.ExtensionContext) {
 }
 
 /**
- * Smart post-highlight cursor positioning
- * Checks if the next action needs cursor repositioning
+ * Handle highlight action with synchronized voiceover
+ * Keeps highlight visible until voiceover completes
  */
-async function handlePostHighlight(nextAction: Action): Promise<void> {
+async function handleHighlightWithVoiceover(
+  action: Action,
+  baseDir: string,
+  enableVoiceover: boolean,
+  defaultVoice: string,
+  statusBarItem: vscode.StatusBarItem
+): Promise<void> {
+  if (!action.path || !action.find) {
+    throw new Error('highlight requires path and find');
+  }
+
+  // Clear any existing highlight decoration
+  if (currentHighlightDecoration) {
+    currentHighlightDecoration.dispose();
+    currentHighlightDecoration = null;
+  }
+
+  // Open the file
+  const highlightPath = path.join(baseDir, action.path);
+  const doc = await vscode.workspace.openTextDocument(highlightPath);
+  await vscode.window.showTextDocument(doc);
+  await delay(500);
+
+  const editor = vscode.window.activeTextEditor;
+  if (!editor) {
+    throw new Error('No active editor after opening file');
+  }
+
+  const document = editor.document;
+
+  // Find the pattern
+  const lineResult = findPattern(document, action.find, action.near, action.inside, action.occurrence);
+  
+  if (!lineResult) {
+    throw new Error(`Pattern not found for highlight: "${action.find}"${action.near ? ` near "${action.near}"` : ''}`);
+  }
+
+  // Highlight the entire line containing the pattern
+  const line = document.lineAt(lineResult.line);
+  const startPos = line.range.start;
+  const endPos = line.range.end;
+
+  // Create decoration for visual highlight
+  currentHighlightDecoration = vscode.window.createTextEditorDecorationType({
+    backgroundColor: 'rgba(255, 255, 0, 0.25)',
+    border: '2px solid rgba(255, 255, 0, 0.6)',
+    borderRadius: '3px',
+    isWholeLine: false
+  });
+
+  // Apply the decoration
+  editor.setDecorations(currentHighlightDecoration, [new vscode.Range(startPos, endPos)]);
+
+  // Reveal the range without selecting it
+  editor.revealRange(
+    new vscode.Range(startPos, endPos),
+    vscode.TextEditorRevealType.InCenter
+  );
+
+  // Move cursor to end of highlighted line (but don't select)
+  editor.selection = new vscode.Selection(endPos, endPos);
+
+  // Handle voiceover timing for highlights
+  const voiceoverTiming = action.voiceover ? (action.voiceoverTiming || 'before') : null;
+  const voiceToUse = action.voice || defaultVoice;
+  const minHighlightDuration = 1000; // Minimum 1 second highlight
+
+  if (enableVoiceover && action.voiceover) {
+    statusBarItem.text = `🔊 ${action.voiceover.substring(0, 50)}...`;
+    
+    if (voiceoverTiming === 'before') {
+      await audioHandler.playVoiceover(action.voiceover, voiceToUse, 'before');
+      // Keep highlight for minimum duration after voiceover
+      await delay(minHighlightDuration);
+    } else if (voiceoverTiming === 'during' || voiceoverTiming === 'after') {
+      // Play voiceover and keep highlight until it finishes
+      await audioHandler.playVoiceover(action.voiceover, voiceToUse, voiceoverTiming);
+    }
+  } else {
+    // No voiceover, use minimum highlight duration
+    await delay(minHighlightDuration);
+  }
+
+  // Clear the decoration after voiceover completes
+  if (currentHighlightDecoration) {
+    currentHighlightDecoration.dispose();
+    currentHighlightDecoration = null;
+  }
+}
+
+/**
+ * Smart post-highlight cursor positioning based on action settings and next action
+ */
+async function handlePostHighlight(currentAction: Action, nextAction: Action | null): Promise<void> {
   const editor = vscode.window.activeTextEditor;
   if (!editor) return;
 
-  // Check if next action is writeText without location, or insert without specific location
+  const document = editor.document;
+  
+  // If user explicitly specified cursor movement, use that
+  if (currentAction.moveCursor) {
+    await applyCursorMovement(editor, currentAction.moveCursor);
+    return;
+  }
+
+  // Otherwise, use smart detection based on next action
+  if (!nextAction) return;
+
   const needsRepositioning = 
     nextAction.type === 'writeText' ||
     (nextAction.type === 'insert' && !nextAction.after && !nextAction.before && nextAction.at === undefined);
 
   if (needsRepositioning) {
-    // Move cursor to end of document
-    const document = editor.document;
-    const lastLine = document.lineAt(document.lineCount - 1);
-    const endPosition = lastLine.range.end;
-    
-    editor.selection = new vscode.Selection(endPosition, endPosition);
-    
-    // Add a newline if we're not already at one
-    const lastLineText = lastLine.text;
-    if (lastLineText.trim().length > 0) {
+    // Default smart behavior: move to end of file
+    await applyCursorMovement(editor, 'endOfFile');
+  }
+}
+
+/**
+ * Apply cursor movement strategy after highlight
+ */
+async function applyCursorMovement(editor: vscode.TextEditor, movement: string): Promise<void> {
+  const document = editor.document;
+  const currentLine = editor.selection.active.line;
+
+  switch (movement) {
+    case 'newLineAfter': {
+      // Insert newline after current line and move cursor there
+      const line = document.lineAt(currentLine);
+      const endPosition = line.range.end;
+      
       await editor.edit(editBuilder => {
         editBuilder.insert(endPosition, '\n');
       });
       
-      // Update cursor position after newline
-      const newEndPosition = editor.document.lineAt(editor.document.lineCount - 1).range.end;
-      editor.selection = new vscode.Selection(newEndPosition, newEndPosition);
+      const newPosition = new vscode.Position(currentLine + 1, 0);
+      editor.selection = new vscode.Selection(newPosition, newPosition);
+      editor.revealRange(
+        new vscode.Range(newPosition, newPosition),
+        vscode.TextEditorRevealType.InCenter
+      );
+      break;
     }
-    
-    // Scroll to cursor
-    editor.revealRange(
-      new vscode.Range(editor.selection.active, editor.selection.active),
-      vscode.TextEditorRevealType.InCenter
-    );
+
+    case 'newLineBefore': {
+      // Insert newline before current line and move cursor there
+      const line = document.lineAt(currentLine);
+      const startPosition = line.range.start;
+      
+      await editor.edit(editBuilder => {
+        editBuilder.insert(startPosition, '\n');
+      });
+      
+      const newPosition = new vscode.Position(currentLine, 0);
+      editor.selection = new vscode.Selection(newPosition, newPosition);
+      editor.revealRange(
+        new vscode.Range(newPosition, newPosition),
+        vscode.TextEditorRevealType.InCenter
+      );
+      break;
+    }
+
+    case 'sameLine': {
+      // Stay at end of current line (already there from highlight)
+      const line = document.lineAt(currentLine);
+      const endPosition = line.range.end;
+      editor.selection = new vscode.Selection(endPosition, endPosition);
+      break;
+    }
+
+    case 'endOfFile': {
+      // Move to end of document
+      const lastLine = document.lineAt(document.lineCount - 1);
+      const endPosition = lastLine.range.end;
+      
+      editor.selection = new vscode.Selection(endPosition, endPosition);
+      
+      // Add a newline if we're not already at one
+      const lastLineText = lastLine.text;
+      if (lastLineText.trim().length > 0) {
+        await editor.edit(editBuilder => {
+          editBuilder.insert(endPosition, '\n');
+        });
+        
+        const newEndPosition = editor.document.lineAt(editor.document.lineCount - 1).range.end;
+        editor.selection = new vscode.Selection(newEndPosition, newEndPosition);
+      }
+      
+      editor.revealRange(
+        new vscode.Range(editor.selection.active, editor.selection.active),
+        vscode.TextEditorRevealType.InCenter
+      );
+      break;
+    }
+
+    case 'nextBlankLine': {
+      // Find next blank line and move cursor there
+      let foundBlankLine = false;
+      for (let i = currentLine + 1; i < document.lineCount; i++) {
+        const line = document.lineAt(i);
+        if (line.text.trim().length === 0) {
+          const position = line.range.start;
+          editor.selection = new vscode.Selection(position, position);
+          editor.revealRange(
+            new vscode.Range(position, position),
+            vscode.TextEditorRevealType.InCenter
+          );
+          foundBlankLine = true;
+          break;
+        }
+      }
+      
+      // If no blank line found, go to end of file
+      if (!foundBlankLine) {
+        await applyCursorMovement(editor, 'endOfFile');
+      }
+      break;
+    }
+
+    case 'stay':
+    default:
+      // Do nothing, cursor stays where it is
+      break;
   }
 }
 
@@ -219,7 +415,7 @@ function getActionDescription(action: Action): string {
     case 'replace':
       return `Replacing: ${action.find?.substring(0, 30)}...`;
     case 'highlight':
-      return `Highlighting in: ${action.path} - ${action.find?.substring(0, 30)}...`;
+      return `Highlighting: ${action.find?.substring(0, 30)}...`;
     default:
       return action.type;
   }
@@ -262,7 +458,6 @@ function detectIndentation(lineText: string, options: { insertSpaces: boolean; t
 
 /**
  * Get the target indentation for a new insertion after/before/at a given line
- * Enhanced for multi-lang: Uses langId for block openers (e.g., '{' for C++/Go, ':' for Python/Ruby)
  */
 function getTargetIndent(document: vscode.TextDocument, targetLine: number): string {
   if (targetLine < 0 || targetLine >= document.lineCount) {
@@ -280,11 +475,10 @@ function getTargetIndent(document: vscode.TextDocument, targetLine: number): str
   const trimmed = line.text.trim();
   const languageId = document.languageId;
   
-  // Lang-specific block openers
   let isBlockOpener = false;
   if (languageId === 'python' || languageId === 'ruby') {
     isBlockOpener = trimmed.endsWith(':');
-  } else if (['javascript', 'typescript', 'go', 'cpp', 'csharp'].includes(languageId)) {
+  } else if (['javascript', 'typescript', 'go', 'cpp', 'csharp', 'java'].includes(languageId)) {
     isBlockOpener = trimmed.endsWith('{');
   }
   
@@ -292,7 +486,6 @@ function getTargetIndent(document: vscode.TextDocument, targetLine: number): str
     return currentTotal + indentChar.repeat(levelSize);
   }
 
-  // Otherwise, find the enclosing block's opener indent (sibling level)
   let scanLine = targetLine - 1;
   while (scanLine >= 0) {
     const prevLine = document.lineAt(scanLine);
@@ -307,7 +500,7 @@ function getTargetIndent(document: vscode.TextDocument, targetLine: number): str
 }
 
 /**
- * Normalize content indentation based on target indentation and lang options
+ * Normalize content indentation
  */
 function normalizeIndentation(content: string, targetIndent: string, options: { insertSpaces: boolean; tabSize: number }): string {
   const lines = content.split('\n');
@@ -333,13 +526,14 @@ function normalizeIndentation(content: string, targetIndent: string, options: { 
   const indentChar = options.insertSpaces ? ' ' : '\t';
   const levelSize = options.insertSpaces ? options.tabSize : 1;
   const normalizedLines: string[] = [];
+  
   for (const line of lines) {
     const prefixMatch = line.match(/^\s*/);
     const prefix = prefixMatch ? prefixMatch[0] : '';
     const relativePrefix = prefix.substring(minPrefix.length);
     const contentPart = line.trimStart();
     
-    let normalizedRelative = relativePrefix.replace(/\t/g, indentChar.repeat(levelSize)).replace(/ {1,3}/g, indentChar.repeat(levelSize / 4 * Math.round(relativePrefix.length / (options.tabSize / 4))));
+    let normalizedRelative = relativePrefix.replace(/\t/g, indentChar.repeat(levelSize));
     
     normalizedLines.push(targetIndent + normalizedRelative + contentPart);
   }
@@ -348,7 +542,7 @@ function normalizeIndentation(content: string, targetIndent: string, options: { 
 }
 
 /**
- * Auto-format the current document using VS Code's language-specific formatter
+ * Auto-format the current document
  */
 async function autoFormatDocument(editor: vscode.TextEditor): Promise<void> {
   if (!editor) return;
@@ -362,10 +556,9 @@ async function autoFormatDocument(editor: vscode.TextEditor): Promise<void> {
 }
 
 /**
- * Type text character by character using direct edits for animation
+ * Type text character by character
  */
 async function typeText(editor: vscode.TextEditor, text: string, speed: number): Promise<void> {
-  const startPosition = editor.selection.active;
   let charCount = 0;
   const scrollInterval = 20;
   const scrollPause = 50;
@@ -414,8 +607,8 @@ async function executeAction(action: Action, baseDir: string, globalTypingSpeed:
       await delay(300);
       
       const folderPath = path.join(baseDir, action.path);
-      
       const parentPath = path.dirname(folderPath);
+      
       if (fs.existsSync(parentPath)) {
         const parentUri = vscode.Uri.file(parentPath);
         await vscode.commands.executeCommand('revealInExplorer', parentUri);
@@ -424,7 +617,6 @@ async function executeAction(action: Action, baseDir: string, globalTypingSpeed:
       
       if (!fs.existsSync(folderPath)) {
         fs.mkdirSync(folderPath, { recursive: true });
-        
         const folderUri = vscode.Uri.file(folderPath);
         await vscode.commands.executeCommand('revealInExplorer', folderUri);
         await delay(700);
@@ -450,7 +642,6 @@ async function executeAction(action: Action, baseDir: string, globalTypingSpeed:
       
       if (!fs.existsSync(filePath)) {
         fs.writeFileSync(filePath, '');
-        
         const fileUri = vscode.Uri.file(filePath);
         await vscode.commands.executeCommand('revealInExplorer', fileUri);
         await delay(700);
@@ -477,10 +668,6 @@ async function executeAction(action: Action, baseDir: string, globalTypingSpeed:
       await handleInsert(action, typingSpeed);
       break;
 
-    case 'highlight':
-      await handleHighlight(action, baseDir);
-      break;
-
     case 'delete':
       await handleDelete(action);
       break;
@@ -489,13 +676,17 @@ async function executeAction(action: Action, baseDir: string, globalTypingSpeed:
       await handleReplace(action, typingSpeed);
       break;
 
+    case 'highlight':
+      // Highlight is handled separately in the main loop
+      throw new Error('Highlight should be handled in main loop');
+
     default:
       throw new Error(`Unknown action type: ${action.type}`);
   }
 }
 
 /**
- * Handle insert action with smart location finding
+ * Handle insert action
  */
 async function handleInsert(action: Action, typingSpeed: number): Promise<void> {
   const editor = vscode.window.activeTextEditor;
@@ -522,76 +713,6 @@ async function handleInsert(action: Action, typingSpeed: number): Promise<void> 
   }
 
   throw new Error('Insert action requires "after", "before", or "at" property');
-}
-
-/**
- * Handle highlight action with decorations instead of selections
- * This prevents the highlighted text from being replaced when typing
- */
-async function handleHighlight(action: Action, baseDir: string): Promise<void> {
-  if (!action.path || !action.find) {
-    throw new Error('highlight requires path and find');
-  }
-
-  // Clear any existing highlight decoration
-  if (currentHighlightDecoration) {
-    currentHighlightDecoration.dispose();
-    currentHighlightDecoration = null;
-  }
-
-  // Open the file
-  const highlightPath = path.join(baseDir, action.path);
-  const doc = await vscode.workspace.openTextDocument(highlightPath);
-  await vscode.window.showTextDocument(doc);
-  await delay(500);
-
-  const editor = vscode.window.activeTextEditor;
-  if (!editor) {
-    throw new Error('No active editor after opening file');
-  }
-
-  const document = editor.document;
-
-  // Find the pattern
-  const lineResult = findPattern(document, action.find, action.near, action.inside, action.occurrence);
-  
-  if (!lineResult) {
-    throw new Error(`Pattern not found for highlight: "${action.find}"${action.near ? ` near "${action.near}"` : ''}`);
-  }
-
-  // Highlight the entire line containing the pattern
-  const line = document.lineAt(lineResult.line);
-  const startPos = line.range.start;
-  const endPos = line.range.end;
-
-  // Create decoration for visual highlight (doesn't interfere with typing)
-  currentHighlightDecoration = vscode.window.createTextEditorDecorationType({
-    backgroundColor: 'rgba(255, 255, 0, 0.25)', // Subtle yellow highlight
-    border: '2px solid rgba(255, 255, 0, 0.6)',
-    borderRadius: '3px',
-    isWholeLine: false
-  });
-
-  // Apply the decoration
-  editor.setDecorations(currentHighlightDecoration, [new vscode.Range(startPos, endPos)]);
-
-  // Reveal the range without selecting it
-  editor.revealRange(
-    new vscode.Range(startPos, endPos),
-    vscode.TextEditorRevealType.InCenter
-  );
-
-  // Move cursor to end of highlighted line (but don't select)
-  editor.selection = new vscode.Selection(endPos, endPos);
-
-  // Keep the highlight visible for a moment
-  await delay(800);
-
-  // Clear the decoration after the delay
-  if (currentHighlightDecoration) {
-    currentHighlightDecoration.dispose();
-    currentHighlightDecoration = null;
-  }
 }
 
 /**
@@ -816,7 +937,7 @@ async function handleReplace(action: Action, typingSpeed: number): Promise<void>
 }
 
 /**
- * Find a pattern in the document with context awareness and fuzzy matching
+ * Find a pattern in the document with context awareness
  */
 function findPattern(
   document: vscode.TextDocument,
@@ -883,7 +1004,6 @@ export function deactivate() {
     audioHandler.cleanup();
   }
   
-  // Clean up any remaining highlight decorations
   if (currentHighlightDecoration) {
     currentHighlightDecoration.dispose();
     currentHighlightDecoration = null;
