@@ -3,9 +3,6 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import { exec } from 'child_process';
-import { promisify } from 'util';
-
-const execAsync = promisify(exec);
 
 export class AudioHandler {
   private tempDir: string;
@@ -20,7 +17,11 @@ export class AudioHandler {
   /**
    * Generate and play voiceover using EdgeTTS
    */
-  async playVoiceover(text: string, voice: string = 'en-US-AriaNeural'): Promise<void> {
+  async playVoiceover(
+    text: string, 
+    voice: string = 'en-US-AriaNeural',
+    timing: 'before' | 'after' | 'during' = 'before'
+  ): Promise<void> {
     const audioFile = path.join(this.tempDir, `audio_${Date.now()}.mp3`);
 
     try {
@@ -37,15 +38,13 @@ export class AudioHandler {
       // Convert Blob to Buffer for Node.js
       let audioBuffer: Buffer;
       if (result.audio instanceof Blob) {
-        // In Node.js environment, convert Blob to Buffer
         const arrayBuffer = await result.audio.arrayBuffer();
         audioBuffer = Buffer.from(arrayBuffer);
       } else {
-        // If it's already a Buffer or Uint8Array
         audioBuffer = Buffer.from(result.audio);
       }
 
-      // Save audio to temp file
+      // Save audio to temp file for playback
       fs.writeFileSync(audioFile, audioBuffer);
       console.log('Audio file created:', audioFile, 'Size:', audioBuffer.length, 'bytes');
 
@@ -60,7 +59,7 @@ export class AudioHandler {
       console.error('Voiceover error:', error);
       throw error;
     } finally {
-      // Clean up the audio file
+      // Clean up the temp playback file
       this.cleanupAudioFile(audioFile);
     }
   }

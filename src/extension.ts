@@ -4,17 +4,29 @@ import * as path from 'path';
 import { AudioHandler } from './audioHandler';
 
 interface Action {
-  type: 'createFolder' | 'createFile' | 'openFile' | 'writeText' | 'deleteLine' | 'insertAt' | 'replaceText';
+  type: 'createFolder' | 'createFile' | 'openFile' | 'writeText' | 'insert' | 'delete' | 'replace';
   path?: string;
   content?: string;
-  line?: number;
-  position?: number;
+  
+  // Location selectors
+  after?: string;
+  before?: string;
+  at?: number;
   find?: string;
-  replace?: string;
+  
+  // Context for disambiguation
+  near?: string;
+  inside?: string;
+  occurrence?: number;
+  
+  // Replace
+  with?: string;
+  
+  // Options
   typingSpeed?: number;
   voiceover?: string;
   voice?: string;
-  voiceoverTiming?: 'before' | 'after' | 'during'; // When to play the voiceover
+  voiceoverTiming?: 'before' | 'after' | 'during';
 }
 
 interface Blueprint {
@@ -31,7 +43,6 @@ let audioHandler: AudioHandler;
 export function activate(context: vscode.ExtensionContext) {
   console.log('JSON Project Builder is now active!');
 
-  // Initialize audio handler
   audioHandler = new AudioHandler();
 
   let disposable = vscode.commands.registerCommand('json-project-builder.buildFromJson', async () => {
@@ -95,41 +106,32 @@ export function activate(context: vscode.ExtensionContext) {
         });
 
         try {
-          // Handle voiceover timing
           const voiceoverTiming = action.voiceover ? (action.voiceoverTiming || 'before') : null;
           const voiceToUse = action.voice || defaultVoice;
 
-          // BEFORE: Play voiceover before action
-          if (voiceoverTiming === 'before') {
+          if (enableVoiceover && voiceoverTiming === 'before') {
             statusBarItem.text = `🔊 ${action.voiceover!.substring(0, 50)}...`;
-            await audioHandler.playVoiceover(action.voiceover!, voiceToUse);
+            await audioHandler.playVoiceover(action.voiceover!, voiceToUse, 'before');
           }
 
-          // DURING: Start voiceover and action simultaneously (don't await)
           let duringAudioPromise: Promise<void> | null = null;
-          if (voiceoverTiming === 'during') {
+          if (enableVoiceover && voiceoverTiming === 'during') {
             statusBarItem.text = `🔊 ${action.voiceover!.substring(0, 50)}...`;
-            // Start audio but DON'T await - let it play in background
-            duringAudioPromise = audioHandler.playVoiceover(action.voiceover!, voiceToUse);
-            // Small delay to let audio start before action begins
+            duringAudioPromise = audioHandler.playVoiceover(action.voiceover!, voiceToUse, 'during');
             await delay(100);
           }
 
-          // Execute the action (runs simultaneously with "during" audio)
           await executeAction(action, baseDir, globalTypingSpeed);
 
-          // AFTER: Play voiceover after action completes
-          if (voiceoverTiming === 'after') {
+          if (enableVoiceover && voiceoverTiming === 'after') {
             statusBarItem.text = `🔊 ${action.voiceover!.substring(0, 50)}...`;
-            await audioHandler.playVoiceover(action.voiceover!, voiceToUse);
+            await audioHandler.playVoiceover(action.voiceover!, voiceToUse, 'after');
           }
 
-          // If DURING was used, wait for audio to finish (if it's still playing)
           if (duringAudioPromise) {
             await duringAudioPromise;
           }
           
-          // Delay between actions
           await delay(actionDelay);
         } catch (error) {
           statusBarItem.dispose();
@@ -157,12 +159,15 @@ function getActionDescription(action: Action): string {
       return `Opening: ${action.path}`;
     case 'writeText':
       return `Writing text...`;
-    case 'deleteLine':
-      return `Deleting line ${action.line}`;
-    case 'insertAt':
-      return `Inserting at line ${action.line}`;
-    case 'replaceText':
-      return `Replacing: ${action.find}`;
+    case 'insert':
+      if (action.after) return `Inserting after: ${action.after.substring(0, 30)}...`;
+      if (action.before) return `Inserting before: ${action.before.substring(0, 30)}...`;
+      if (action.at !== undefined) return `Inserting at line ${action.at}`;
+      return `Inserting code...`;
+    case 'delete':
+      return `Deleting: ${action.find?.substring(0, 30)}...`;
+    case 'replace':
+      return `Replacing: ${action.find?.substring(0, 30)}...`;
     default:
       return action.type;
   }
@@ -172,16 +177,20 @@ async function delay(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
+/**
+ * FIXED: Type text character by character, properly handling escape sequences
+ */
 async function typeText(editor: vscode.TextEditor, text: string, speed: number): Promise<void> {
-  for (const char of text) {
-    await editor.edit(editBuilder => {
-      const position = editor.selection.active;
-      editBuilder.insert(position, char);
-    });
-    
-    const newPosition = editor.selection.active;
-    editor.selection = new vscode.Selection(newPosition, newPosition);
-    
+  // Process escape sequences BEFORE iterating character by character
+  // This converts JSON strings like "line1\n    line2" into actual newlines and spaces
+  const processedText = text
+    .replace(/\\n/g, '\n')  // Convert \n to actual newline
+    .replace(/\\t/g, '\t')  // Convert \t to actual tab
+    .replace(/\\r/g, '\r')  // Convert \r to carriage return
+    .replace(/\\\\/g, '\\'); // Convert \\ to single backslash
+  
+  for (const char of processedText) {
+    await vscode.commands.executeCommand('type', { text: char });
     await delay(speed);
   }
 }
@@ -256,68 +265,292 @@ async function executeAction(action: Action, baseDir: string, globalTypingSpeed:
       await typeText(editor, action.content, typingSpeed);
       break;
 
-    case 'insertAt':
-      if (!action.content || action.line === undefined) {
-        throw new Error('insertAt requires content and line');
-      }
-      const insertEditor = vscode.window.activeTextEditor;
-      if (!insertEditor) throw new Error('No active editor');
-      
-      const position = new vscode.Position(action.line, 0);
-      insertEditor.selection = new vscode.Selection(position, position);
-      await delay(200);
-      
-      await typeText(insertEditor, action.content + '\n', typingSpeed);
+    case 'insert':
+      await handleInsert(action, typingSpeed);
       break;
 
-    case 'deleteLine':
-      if (action.line === undefined) throw new Error('deleteLine requires line');
-      const deleteEditor = vscode.window.activeTextEditor;
-      if (!deleteEditor) throw new Error('No active editor');
-      
-      const line = deleteEditor.document.lineAt(action.line);
-      deleteEditor.selection = new vscode.Selection(
-        line.range.start,
-        line.range.end
-      );
-      await delay(500);
-      
-      await deleteEditor.edit(editBuilder => {
-        editBuilder.delete(line.rangeIncludingLineBreak);
-      });
+    case 'delete':
+      await handleDelete(action);
       break;
 
-    case 'replaceText':
-      if (!action.find || action.replace === undefined) {
-        throw new Error('replaceText requires find and replace');
-      }
-      const replaceEditor = vscode.window.activeTextEditor;
-      if (!replaceEditor) throw new Error('No active editor');
-      
-      const text = replaceEditor.document.getText();
-      
-      const index = text.indexOf(action.find);
-      if (index !== -1) {
-        const startPos = replaceEditor.document.positionAt(index);
-        const endPos = replaceEditor.document.positionAt(index + action.find.length);
-        replaceEditor.selection = new vscode.Selection(startPos, endPos);
-        replaceEditor.revealRange(new vscode.Range(startPos, endPos));
-        await delay(800);
-      }
-      
-      const newText = text.replace(new RegExp(action.find, 'g'), action.replace);
-      
-      await replaceEditor.edit(editBuilder => {
-        const firstLine = replaceEditor.document.lineAt(0);
-        const lastLine = replaceEditor.document.lineAt(replaceEditor.document.lineCount - 1);
-        const range = new vscode.Range(firstLine.range.start, lastLine.range.end);
-        editBuilder.replace(range, newText);
-      });
+    case 'replace':
+      await handleReplace(action, typingSpeed);
       break;
 
     default:
       throw new Error(`Unknown action type: ${action.type}`);
   }
+}
+
+/**
+ * Handle insert action with smart location finding
+ */
+async function handleInsert(action: Action, typingSpeed: number): Promise<void> {
+  const editor = vscode.window.activeTextEditor;
+  if (!editor || !action.content) {
+    throw new Error('No active editor or content missing');
+  }
+
+  // Insert after a pattern
+  if (action.after) {
+    await insertAfterPattern(editor, action, typingSpeed);
+    return;
+  }
+
+  // Insert before a pattern
+  if (action.before) {
+    await insertBeforePattern(editor, action, typingSpeed);
+    return;
+  }
+
+  // Insert at specific line
+  if (action.at !== undefined) {
+    await insertAtLine(editor, action, typingSpeed);
+    return;
+  }
+
+  throw new Error('Insert action requires "after", "before", or "at" property');
+}
+
+/**
+ * Insert after a pattern - simulates pressing Enter at end of line
+ * Content should NOT have leading newline or spaces - VS Code auto-indents!
+ */
+async function insertAfterPattern(
+  editor: vscode.TextEditor,
+  action: Action,
+  typingSpeed: number
+): Promise<void> {
+  const document = editor.document;
+  
+  // Find the line with the pattern
+  const lineResult = findPattern(document, action.after!, action.near, action.inside, action.occurrence);
+  
+  if (!lineResult) {
+    throw new Error(`Pattern not found: "${action.after}"${action.near ? ` near "${action.near}"` : ''}`);
+  }
+
+  const line = document.lineAt(lineResult.line);
+  
+  // Move cursor to END of the line
+  const endPosition = line.range.end;
+  editor.selection = new vscode.Selection(endPosition, endPosition);
+  
+  // Reveal the line
+  editor.revealRange(
+    new vscode.Range(endPosition, endPosition),
+    vscode.TextEditorRevealType.InCenter
+  );
+  
+  await delay(300);
+
+  // Press Enter - VS Code auto-indents based on the line above!
+  await vscode.commands.executeCommand('type', { text: '\n' });
+  await delay(100);
+
+  // Type the content - it should NOT have leading spaces!
+  // VS Code already indented after pressing Enter
+  await typeText(editor, action.content!, typingSpeed);
+}
+
+/**
+ * Insert before a pattern - simulates creating a new line above
+ * Content should NOT have leading newline or spaces
+ */
+async function insertBeforePattern(
+  editor: vscode.TextEditor,
+  action: Action,
+  typingSpeed: number
+): Promise<void> {
+  const document = editor.document;
+  
+  // Find the line with the pattern
+  const lineResult = findPattern(document, action.before!, action.near, action.inside, action.occurrence);
+  
+  if (!lineResult) {
+    throw new Error(`Pattern not found: "${action.before}"${action.near ? ` near "${action.near}"` : ''}`);
+  }
+
+  const line = document.lineAt(lineResult.line);
+  
+  // Move cursor to START of the line
+  const startPosition = line.range.start;
+  editor.selection = new vscode.Selection(startPosition, startPosition);
+  
+  // Reveal the line
+  editor.revealRange(
+    new vscode.Range(startPosition, startPosition),
+    vscode.TextEditorRevealType.InCenter
+  );
+  
+  await delay(300);
+
+  // Type the content first (without leading spaces)
+  await typeText(editor, action.content!, typingSpeed);
+  
+  // Then press Enter to move the original line down
+  await vscode.commands.executeCommand('type', { text: '\n' });
+  await delay(100);
+}
+
+/**
+ * Insert at specific line number
+ */
+async function insertAtLine(
+  editor: vscode.TextEditor,
+  action: Action,
+  typingSpeed: number
+): Promise<void> {
+  const document = editor.document;
+  const lineNumber = Math.max(0, Math.min(action.at!, document.lineCount - 1));
+  const line = document.lineAt(lineNumber);
+  
+  // Move cursor to start of line
+  const position = line.range.start;
+  editor.selection = new vscode.Selection(position, position);
+  
+  editor.revealRange(
+    new vscode.Range(position, position),
+    vscode.TextEditorRevealType.InCenter
+  );
+  
+  await delay(300);
+
+  // Type content
+  await typeText(editor, action.content!, typingSpeed);
+  
+  // Press Enter
+  await vscode.commands.executeCommand('type', { text: '\n' });
+  await delay(100);
+}
+
+/**
+ * Handle delete action
+ */
+async function handleDelete(action: Action): Promise<void> {
+  const editor = vscode.window.activeTextEditor;
+  if (!editor || !action.find) {
+    throw new Error('No active editor or find pattern missing');
+  }
+
+  const document = editor.document;
+  const text = document.getText();
+  
+  // Find the text to delete
+  const index = text.indexOf(action.find);
+  if (index === -1) {
+    throw new Error(`Text not found: "${action.find}"`);
+  }
+
+  // Select the text
+  const startPos = document.positionAt(index);
+  const endPos = document.positionAt(index + action.find.length);
+  
+  editor.selection = new vscode.Selection(startPos, endPos);
+  editor.revealRange(new vscode.Range(startPos, endPos));
+  
+  await delay(500);
+
+  // Delete it
+  await editor.edit(editBuilder => {
+    editBuilder.delete(new vscode.Range(startPos, endPos));
+  });
+}
+
+/**
+ * Handle replace action
+ */
+async function handleReplace(action: Action, typingSpeed: number): Promise<void> {
+  const editor = vscode.window.activeTextEditor;
+  if (!editor || !action.find || action.with === undefined) {
+    throw new Error('No active editor or find/with pattern missing');
+  }
+
+  const document = editor.document;
+  const text = document.getText();
+  
+  // Find the text to replace
+  const index = text.indexOf(action.find);
+  if (index === -1) {
+    throw new Error(`Text not found: "${action.find}"`);
+  }
+
+  // Select the text
+  const startPos = document.positionAt(index);
+  const endPos = document.positionAt(index + action.find.length);
+  
+  editor.selection = new vscode.Selection(startPos, endPos);
+  editor.revealRange(new vscode.Range(startPos, endPos));
+  
+  await delay(800);
+
+  // Replace it
+  await editor.edit(editBuilder => {
+    editBuilder.replace(new vscode.Range(startPos, endPos), action.with!);
+  });
+}
+
+/**
+ * Find a pattern in the document with context awareness
+ */
+function findPattern(
+  document: vscode.TextDocument,
+  pattern: string,
+  near?: string,
+  inside?: string,
+  occurrence?: number
+): { line: number; character: number } | null {
+  
+  const text = document.getText();
+  const lines = text.split('\n');
+  
+  // Find all matches of the pattern
+  const matches: { line: number; character: number }[] = [];
+  
+  for (let lineNum = 0; lineNum < lines.length; lineNum++) {
+    const lineText = lines[lineNum];
+    const index = lineText.indexOf(pattern);
+    
+    if (index !== -1) {
+      matches.push({ line: lineNum, character: index });
+    }
+  }
+
+  if (matches.length === 0) {
+    return null;
+  }
+
+  // If only one match, return it
+  if (matches.length === 1) {
+    return matches[0];
+  }
+
+  // Filter by context if provided
+  let filteredMatches = matches;
+
+  if (near || inside) {
+    const contextPattern = near || inside;
+    filteredMatches = matches.filter(match => {
+      // Search within +/- 20 lines for context
+      const startLine = Math.max(0, match.line - 20);
+      const endLine = Math.min(lines.length - 1, match.line + 20);
+      
+      for (let i = startLine; i <= endLine; i++) {
+        if (lines[i].indexOf(contextPattern!) !== -1) {
+          return true;
+        }
+      }
+      return false;
+    });
+  }
+
+  if (filteredMatches.length === 0) {
+    return null;
+  }
+
+  // Return the Nth occurrence (default to first)
+  const index = Math.min((occurrence || 1) - 1, filteredMatches.length - 1);
+  return filteredMatches[index];
 }
 
 export function deactivate() {
