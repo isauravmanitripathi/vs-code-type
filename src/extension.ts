@@ -4,7 +4,7 @@ import * as path from 'path';
 import { AudioHandler } from './audioHandler';
 
 interface Action {
-  type: 'createFolder' | 'createFile' | 'openFile' | 'writeText' | 'insert' | 'delete' | 'replace';
+  type: 'createFolder' | 'createFile' | 'openFile' | 'writeText' | 'insert' | 'delete' | 'replace' | 'highlight';
   path?: string;
   content?: string;
   
@@ -168,6 +168,8 @@ function getActionDescription(action: Action): string {
       return `Deleting: ${action.find?.substring(0, 30)}...`;
     case 'replace':
       return `Replacing: ${action.find?.substring(0, 30)}...`;
+    case 'highlight':
+      return `Highlighting in: ${action.path} - ${action.find?.substring(0, 30)}...`;
     default:
       return action.type;
   }
@@ -381,6 +383,10 @@ async function executeAction(action: Action, baseDir: string, globalTypingSpeed:
       await handleInsert(action, typingSpeed);
       break;
 
+    case 'highlight':
+      await handleHighlight(action, baseDir);
+      break;
+
     case 'delete':
       await handleDelete(action);
       break;
@@ -422,6 +428,49 @@ async function handleInsert(action: Action, typingSpeed: number): Promise<void> 
   }
 
   throw new Error('Insert action requires "after", "before", or "at" property');
+}
+
+/**
+ * Handle highlight action: open file, find and select pattern, reveal, then voiceover
+ */
+async function handleHighlight(action: Action, baseDir: string): Promise<void> {
+  if (!action.path || !action.find || !action.voiceover) {
+    throw new Error('highlight requires path, find, and voiceover');
+  }
+
+  // Open the file
+  const highlightPath = path.join(baseDir, action.path);
+  const doc = await vscode.workspace.openTextDocument(highlightPath);
+  await vscode.window.showTextDocument(doc);
+  await delay(500);
+
+  const editor = vscode.window.activeTextEditor;
+  if (!editor) {
+    throw new Error('No active editor after opening file');
+  }
+
+  const document = editor.document;
+
+  // Find the pattern
+  const lineResult = findPattern(document, action.find, action.near, action.inside, action.occurrence);
+  
+  if (!lineResult) {
+    throw new Error(`Pattern not found for highlight: "${action.find}"${action.near ? ` near "${action.near}"` : ''}`);
+  }
+
+  // For simplicity, highlight the entire line containing the pattern
+  const line = document.lineAt(lineResult.line);
+  const startPos = line.range.start;
+  const endPos = line.range.end;
+
+  // Select and reveal the highlighted range
+  editor.selection = new vscode.Selection(startPos, endPos);
+  editor.revealRange(
+    new vscode.Range(startPos, endPos),
+    vscode.TextEditorRevealType.InCenter
+  );
+
+  await delay(300); // Pause to show the highlight
 }
 
 /**
