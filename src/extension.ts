@@ -121,6 +121,7 @@ export function activate(context: vscode.ExtensionContext) {
       const defaultVoice = blueprint.defaultVoice || 'en-US-AriaNeural';
       const enableVoiceover = blueprint.enableVoiceover !== false;
 
+      // Create status bar item for progress display
       const statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 100);
       statusBarItem.show();
 
@@ -128,75 +129,71 @@ export function activate(context: vscode.ExtensionContext) {
         ? `Blueprint ${fileIndex + 1}/${blueprintFiles.length}: ${fileName}`
         : fileName;
 
-      await vscode.window.withProgress({
-        location: vscode.ProgressLocation.Notification,
-        title: `Building ${blueprintTitle}`,
-        cancellable: false
-      }, async (progress) => {
-        const totalActions = blueprint.actions.length;
+      const totalActions = blueprint.actions.length;
 
-        for (let i = 0; i < blueprint.actions.length; i++) {
-          const action = blueprint.actions[i];
-          const nextAction = i + 1 < blueprint.actions.length ? blueprint.actions[i + 1] : null;
-          const actionName = getActionDescription(action);
-          
-          statusBarItem.text = `🔨 ${actionName}`;
-          progress.report({
-            message: `Step ${i + 1}/${totalActions}: ${actionName}`,
-            increment: (100 / totalActions)
-          });
+      for (let i = 0; i < blueprint.actions.length; i++) {
+        const action = blueprint.actions[i];
+        const nextAction = i + 1 < blueprint.actions.length ? blueprint.actions[i + 1] : null;
+        const actionName = getActionDescription(action);
+        
+        // Update status bar with step progress
+        statusBarItem.text = `$(rocket) Step ${i + 1}/${totalActions}: ${actionName}`;
+        statusBarItem.tooltip = `Building ${blueprintTitle}`;
 
-          try {
-            // Special handling for highlight actions with voiceover
-            if (action.type === 'highlight') {
-              await handleHighlightWithVoiceover(action, baseDir, enableVoiceover, defaultVoice, statusBarItem);
-              
-              // Handle cursor positioning after highlight
-              await handlePostHighlight(action, nextAction);
-            } else {
-              // Normal action handling
-              const voiceoverTiming = action.voiceover ? (action.voiceoverTiming || 'before') : null;
-              const voiceToUse = action.voice || defaultVoice;
-
-              if (enableVoiceover && voiceoverTiming === 'before') {
-                statusBarItem.text = `🔊 ${action.voiceover!.substring(0, 10)}...`;
-                await audioHandler.playVoiceover(action.voiceover!, voiceToUse, 'before');
-              }
-
-              let duringAudioPromise: Promise<void> | null = null;
-              if (enableVoiceover && voiceoverTiming === 'during') {
-                statusBarItem.text = `🔊 ${action.voiceover!.substring(0, 50)}...`;
-                duringAudioPromise = audioHandler.playVoiceover(action.voiceover!, voiceToUse, 'during');
-                await delay(100);
-              }
-
-              await executeAction(action, baseDir, globalTypingSpeed);
-
-              if (enableVoiceover && voiceoverTiming === 'after') {
-                statusBarItem.text = `🔊 ${action.voiceover!.substring(0, 50)}...`;
-                await audioHandler.playVoiceover(action.voiceover!, voiceToUse, 'after');
-              }
-
-              if (duringAudioPromise) {
-                await duringAudioPromise;
-              }
-            }
+        try {
+          // Special handling for highlight actions with voiceover
+          if (action.type === 'highlight') {
+            await handleHighlightWithVoiceover(action, baseDir, enableVoiceover, defaultVoice, statusBarItem);
             
-            await delay(actionDelay);
-          } catch (error) {
-            statusBarItem.dispose();
-            vscode.window.showErrorMessage(`Error in ${fileName} at step ${i + 1}: ${error}`);
-            return;
+            // Handle cursor positioning after highlight
+            await handlePostHighlight(action, nextAction);
+          } else {
+            // Normal action handling
+            const voiceoverTiming = action.voiceover ? (action.voiceoverTiming || 'before') : null;
+            const voiceToUse = action.voice || defaultVoice;
+
+            if (enableVoiceover && voiceoverTiming === 'before') {
+              statusBarItem.text = `$(unmute) Playing: ${action.voiceover!.substring(0, 40)}...`;
+              await audioHandler.playVoiceover(action.voiceover!, voiceToUse, 'before');
+              // Restore action status after audio
+              statusBarItem.text = `$(rocket) Step ${i + 1}/${totalActions}: ${actionName}`;
+            }
+
+            let duringAudioPromise: Promise<void> | null = null;
+            if (enableVoiceover && voiceoverTiming === 'during') {
+              statusBarItem.text = `$(unmute) ${actionName} (+ audio)`;
+              duringAudioPromise = audioHandler.playVoiceover(action.voiceover!, voiceToUse, 'during');
+              await delay(100);
+            }
+
+            await executeAction(action, baseDir, globalTypingSpeed);
+
+            if (enableVoiceover && voiceoverTiming === 'after') {
+              statusBarItem.text = `$(unmute) Playing: ${action.voiceover!.substring(0, 40)}...`;
+              await audioHandler.playVoiceover(action.voiceover!, voiceToUse, 'after');
+            }
+
+            if (duringAudioPromise) {
+              await duringAudioPromise;
+            }
           }
+          
+          await delay(actionDelay);
+        } catch (error) {
+          statusBarItem.dispose();
+          vscode.window.showErrorMessage(`Error in ${fileName} at step ${i + 1}: ${error}`);
+          return;
         }
+      }
 
-        statusBarItem.dispose();
-      });
+      statusBarItem.text = `$(check) ${blueprintTitle} completed!`;
+      await delay(2000);
+      statusBarItem.dispose();
 
-      // Show progress message between blueprints
+      // Show message between blueprints
       if (fileIndex < blueprintFiles.length - 1) {
         vscode.window.showInformationMessage(`✅ ${fileName} completed! Starting next blueprint...`);
-        await delay(2000); // Pause between blueprints
+        await delay(2000);
       }
     }
 
@@ -308,7 +305,7 @@ async function handleHighlightWithVoiceover(
   const minHighlightDuration = 1000; // Minimum 1 second highlight
 
   if (enableVoiceover && action.voiceover) {
-    statusBarItem.text = `🔊 ${action.voiceover.substring(0, 50)}...`;
+    statusBarItem.text = `$(unmute) ${action.voiceover.substring(0, 50)}...`;
     
     if (voiceoverTiming === 'before') {
       await audioHandler.playVoiceover(action.voiceover, voiceToUse, 'before');
