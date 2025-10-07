@@ -1,230 +1,88 @@
-# JSON Project Builder - Quick Guide
+# JSON Project Builder
 
-## What Is It?
-A VS Code extension that automates project creation and generates coding tutorials with AI voiceovers using JSON blueprints.
+A VS Code extension to automate project creation and interactive coding tutorials from JSON "blueprints". It creates files/folders, types code, highlights sections, and adds AI voiceovers for step-by-step demos.
 
----
+## Quick Start
 
-## Basic Structure
+1. **Install**: Search "JSON Project Builder" in VS Code Extensions and install.
+2. **Run**: Open Command Palette (`Ctrl+Shift+P` / `Cmd+Shift+P`), type "JSON Project Builder: Build from JSON", select a `.json` blueprint file (or folder of them).
+3. **Requirements**: Open a VS Code workspace. Voiceovers use Azure Speech (needs config; disable via `enableVoiceover: false` for testing).
+
+## Blueprint Structure
+
+Every blueprint is a JSON file like this:
 
 ```json
 {
-  "rootFolder": "project-name",
-  "globalTypingSpeed": 35,
-  "actionDelay": 1000,
-  "defaultVoice": "en-US-AndrewMultilingualNeural",
-  "enableVoiceover": true,
-  "actions": [
-    // Your actions go here
+  "rootFolder": "my-project",  // Required: Base folder to create
+  "globalTypingSpeed": 35,     // Optional: ms per char (default: 50)
+  "actionDelay": 1000,         // Optional: ms between actions (default: 800)
+  "defaultVoice": "en-US-AndrewNeural",  // Optional: TTS voice (default: "en-US-AriaNeural")
+  "enableVoiceover": true,     // Optional: Enable narration (default: true)
+  "actions": [                 // Array of actions (required)
+    // Actions here
   ]
 }
 ```
 
----
+- Paths are relative to `rootFolder`.
+- Actions run sequentially; use delays for pacing.
+- Test without voice: Set `"enableVoiceover": false`.
 
-## Core Actions
+## Action Types
 
-### 1. Create Folders & Files
+Each action has a `type` and optional properties. All support `voiceover` (narration text) and `voiceoverTiming` (`"before"`: speak then act; `"during"`: concurrent; `"after"`: act then speak; default: `"before"`). Use `typingSpeed` (ms/char) to override global.
 
-**Important:** Always create folders BEFORE creating files inside them!
+| Type | What It Does | Required Properties | Optional Properties | Example | Tips & Incompatibilities |
+|-----|--------------|---------------------|---------------------|---------|-------------------------|
+| **createFolder** | Creates a folder (reveals in Explorer). | `path` (e.g., "src/utils") | `voiceover`, `voiceoverTiming` | `{"type": "createFolder", "path": "src"}` | Create parents first (e.g., "src" before "src/utils"). No content. |
+| **createFile** | Creates an empty file (reveals in Explorer; auto-creates parents). | `path` (e.g., "src/main.py") | `voiceover`, `voiceoverTiming` | `{"type": "createFile", "path": "index.js"}` | Extension sets syntax highlighting. Create before opening. |
+| **openFile** | Opens file in editor (becomes active). | `path` | `voiceover`, `voiceoverTiming` | `{"type": "openFile", "path": "index.js"}` | File must exist. Use before `writeText`/`insert`. |
+| **writeText** | Types text at cursor (char-by-char; auto-formats after). | `content` (use `\n` for lines) | `voiceover`, `voiceoverTiming`, `typingSpeed` | `{"type": "writeText", "content": "console.log('Hi');\n"}` | Appends to cursor—use after `openFile`. Write complete blocks. No positioning (use `insert` for that). |
+| **insert** | Inserts text relative to a spot (auto-indents; adds newline if needed). | `content`; one of: `after`/`before` (pattern), `at` (line #, 0-based) | `near`/`inside` (context), `occurrence` (# match, 1-based), `voiceover`, `voiceoverTiming`, `typingSpeed` | `{"type": "insert", "after": "import React", "content": "import {useState}\n"}` | Patterns fuzzy (ignores whitespace). Use `near` if ambiguous. Content: relative indent. Not for absolute start. |
+| **delete** | Finds & deletes pattern (selects first, 500ms view, auto-formats). | `find` (pattern) | `near`/`inside`/`occurrence`, `voiceover`, `voiceoverTiming` | `{"type": "delete", "find": "console.log('debug')"}` | First match only. Specific patterns to avoid wrong deletes. No replacement (use `replace`). |
+| **replace** | Finds pattern, deletes (800ms view), types new text (auto-formats). | `find`, `with` (new text) | `near`/`inside`/`occurrence`, `voiceover`, `voiceoverTiming`, `typingSpeed` | `{"type": "replace", "find": "let x=1", "with": "const x=1"}` | First match. Good for refactors. Types `with`—keep short. |
+| **highlight** | Opens file, highlights line with pattern (yellow bg/border, min 1s; clears after). | `path`, `find` | `near`/`inside`/`occurrence`, `voiceover`, `voiceoverTiming`, `voice` (voice override), `moveCursor` (post-position: "endOfFile", "newLineAfter", "newLineBefore", "sameLine", "stay", "nextBlankLine") | `{"type": "highlight", "path": "main.py", "find": "print('Hi')", "voiceover": "This prints hello.", "voiceoverTiming": "during", "moveCursor": "endOfFile"}` | Use `"during"` to sync with voice (highlight stays till done). Patterns fuzzy. Always set `moveCursor` if next action types. Highlights whole line. |
 
-```json
-{
-  "type": "createFolder",
-  "path": "src",
-  "voiceover": "Creating source folder"
-}
-```
+- **Pattern Matching (for insert/delete/replace/highlight)**: Substring search (ignores leading/trailing space). Filters by `near` (20-line window). Defaults to first match; `occurrence: 2` for second.
+- **Voice**: Overrides default (e.g., `"voice": "en-US-GuyNeural"`). All actions share `voiceover` props.
+- **Incompatibilities**: No `moveCursor` except on `highlight`. Don't mix `after`/`before`/`at` in one `insert`. Patterns must exist (error if not found). No regex—use exact-ish strings.
 
-```json
-{
-  "type": "createFile",
-  "path": "src/main.py",
-  "voiceover": "Creating main Python file"
-}
-```
+## Best Practices
 
-### 2. Open & Write
+- **Order**: Folders > files > open > write/insert > highlight/delete/replace.
+- **Pacing**: Slower typing (50+ ms) for beginners; add `\n\n` before sections in `content`.
+- **Indent**: Extension auto-detects (spaces/tabs from VS Code config). Use relative indents in `content` (e.g., 4 spaces for blocks).
+- **Voiceovers**: Keep short (1-2 sentences). Test with `enableVoiceover: false`.
+- **Testing**: Run one action at a time; check console for errors.
+- **Files**: Use forward slashes (`/`). Multi-blueprint folder: Processes alphabetically.
 
-```json
-{
-  "type": "openFile",
-  "path": "src/main.py",
-  "voiceover": "Opening the main file"
-}
-```
+## Common Pitfalls & Fixes
 
-```json
-{
-  "type": "writeText",
-  "content": "print('Hello World')\n",
-  "voiceover": "Writing our first line of code",
-  "typingSpeed": 30
-}
-```
+- **Pattern Not Found**: Make specific; add `near: "function name"`.
+- **Wrong Cursor**: Set `moveCursor: "endOfFile"` on highlights before typing.
+- **Bad Indent**: Provide relative spaces in `content`; auto-format runs after edits.
+- **Highlight Too Quick**: Use `"voiceoverTiming": "during"`.
+- **File Not Open**: Always `openFile` before `writeText`/`insert`.
 
-### 3. Highlight Code
+## Full Example Blueprint
 
 ```json
 {
-  "type": "highlight",
-  "path": "src/main.py",
-  "find": "print('Hello World')",
-  "voiceover": "This line prints Hello World to the console"
-}
-```
-
----
-
-## Valid Highlight Properties
-
-✅ **Allowed:**
-- `path` (required)
-- `find` (required)
-- `voiceover` (required)
-- `near` (optional - for disambiguation)
-- `inside` (optional - for disambiguation)
-- `occurrence` (optional - which match to highlight)
-- `voice` (optional - override default voice)
-- `voiceoverTiming` (optional - "before", "during", "after")
-
-❌ **NOT Allowed:**
-- `moveCursor` - This property doesn't exist!
-- Any other undocumented properties
-
----
-
-## Voiceover Timing
-
-```json
-{
-  "voiceover": "Explanation text",
-  "voiceoverTiming": "before"  // Options: "before", "during", "after"
-}
-```
-
-- **`"before"`** - Speak, then execute action (default)
-- **`"during"`** - Speak while action executes
-- **`"after"`** - Execute action, then speak
-
----
-
-## Common Mistakes
-
-### ❌ Wrong: File before folder
-```json
-{
-  "type": "createFile",
-  "path": "Python/solution.py"  // Error! Python folder doesn't exist
-}
-```
-
-### ✅ Correct: Folder first
-```json
-{
-  "type": "createFolder",
-  "path": "Python"
-},
-{
-  "type": "createFile",
-  "path": "Python/solution.py"
-}
-```
-
-### ❌ Wrong: Invalid property
-```json
-{
-  "type": "highlight",
-  "find": "code",
-  "moveCursor": "newLine"  // This doesn't exist!
-}
-```
-
-### ✅ Correct: Valid properties only
-```json
-{
-  "type": "highlight",
-  "path": "main.py",
-  "find": "code",
-  "voiceover": "Explanation"
-}
-```
-
----
-
-## Complete Example
-
-```json
-{
-  "rootFolder": "hello-python",
-  "globalTypingSpeed": 35,
-  "actionDelay": 1000,
-  "defaultVoice": "en-US-AndrewMultilingualNeural",
+  "rootFolder": "hello-world",
+  "globalTypingSpeed": 40,
+  "actionDelay": 1200,
+  "defaultVoice": "en-US-AndrewNeural",
   "enableVoiceover": true,
   "actions": [
-    {
-      "type": "createFolder",
-      "path": "src",
-      "voiceover": "First, we create a source folder"
-    },
-    {
-      "type": "createFile",
-      "path": "src/main.py",
-      "voiceover": "Now let's create our main Python file"
-    },
-    {
-      "type": "openFile",
-      "path": "src/main.py",
-      "voiceover": "Opening the file to add our code"
-    },
-    {
-      "type": "writeText",
-      "content": "def greet(name):\n    return f'Hello, {name}!'\n\n",
-      "voiceover": "We define a simple greeting function",
-      "voiceoverTiming": "during"
-    },
-    {
-      "type": "writeText",
-      "content": "print(greet('World'))\n",
-      "voiceover": "And we call it to print Hello World"
-    },
-    {
-      "type": "highlight",
-      "path": "src/main.py",
-      "find": "def greet(name):",
-      "voiceover": "This function takes a name parameter and returns a greeting"
-    }
+    {"type": "createFolder", "path": "src", "voiceover": "Create source folder."},
+    {"type": "createFile", "path": "src/app.js"},
+    {"type": "openFile", "path": "src/app.js"},
+    {"type": "writeText", "content": "console.log('Hello');\n"},
+    {"type": "highlight", "path": "src/app.js", "find": "console.log", "voiceover": "This logs to console.", "voiceoverTiming": "during", "moveCursor": "newLineAfter"},
+    {"type": "insert", "after": "console.log", "content": "alert('World');\n", "voiceover": "Add alert."}
   ]
 }
 ```
 
----
-
-## Quick Tips
-
-1. **Always create folders before files inside them**
-2. **Write code top to bottom** - use `writeText` sequentially
-3. **Highlight after writing** - highlight code only after it's been written
-4. **Check spelling** - property names must be exact (no `moveCursor`, etc.)
-5. **Use proper paths** - relative to `rootFolder`
-6. **Test without voiceover first** - set `"enableVoiceover": false` while testing
-
----
-
-## Running Your Blueprint
-
-1. Open VS Code
-2. Press `Ctrl+Shift+P` (Windows/Linux) or `Cmd+Shift+P` (Mac)
-3. Type: "JSON Project Builder: Build from JSON"
-4. Select your JSON file
-5. Watch it build!
-
----
-
-## Need More?
-
-Check the complete documentation for advanced features like:
-- `insert` - Add code at specific locations
-- `replace` - Find and replace text
-- `delete` - Remove code
-- Pattern matching with `near`, `inside`, `occurrence`
+For advanced use (e.g., multi-occurrence), see full docs in extension repo. Questions? File an issue!
