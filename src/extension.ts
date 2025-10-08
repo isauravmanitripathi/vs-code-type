@@ -53,6 +53,9 @@ let currentHighlightDecoration: vscode.TextEditorDecorationType | null = null;
 // Global status bar item
 let globalStatusBar: vscode.StatusBarItem;
 
+// Timer interval
+let timerInterval: NodeJS.Timeout | null = null;
+
 /**
  * Remove Python docstrings (triple quotes) from content
  * Removes both """ and ''' style docstrings
@@ -122,14 +125,43 @@ async function monitorAudioGeneration(statusBar: vscode.StatusBarItem): Promise<
   
   while (!cacheManager.isAllReady()) {
     const status = cacheManager.getProgress();
-    statusBar.text = `$(sync~spin) Generating audio in background (${status.ready}/${status.total})...`;
+    const timerPrefix = timestampTracker.getElapsedFormatted();
+    statusBar.text = `${timerPrefix} $(sync~spin) Generating audio (${status.ready}/${status.total})...`;
     await delay(500);
   }
   
   const finalStatus = cacheManager.getProgress();
   if (finalStatus.failed > 0) {
-    statusBar.text = `$(warning) Audio: ${finalStatus.ready} ready, ${finalStatus.failed} failed`;
+    const timerPrefix = timestampTracker.getElapsedFormatted();
+    statusBar.text = `${timerPrefix} $(warning) Audio: ${finalStatus.ready} ready, ${finalStatus.failed} failed`;
     await delay(2000);
+  }
+}
+
+/**
+ * Start timer that updates status bar every second
+ */
+function startTimer(statusBar: vscode.StatusBarItem, getCurrentMessage: () => string): void {
+  // Clear any existing timer
+  if (timerInterval) {
+    clearInterval(timerInterval);
+  }
+  
+  // Update every second
+  timerInterval = setInterval(() => {
+    const timerPrefix = timestampTracker.getElapsedFormatted();
+    const currentMsg = getCurrentMessage();
+    statusBar.text = `${timerPrefix} ${currentMsg}`;
+  }, 1000);
+}
+
+/**
+ * Stop the timer
+ */
+function stopTimer(): void {
+  if (timerInterval) {
+    clearInterval(timerInterval);
+    timerInterval = null;
   }
 }
 
@@ -147,6 +179,7 @@ export function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push({
     dispose: () => {
       console.log('Cleaning up audio files...');
+      stopTimer();
       if (audioHandler) {
         audioHandler.cleanup();
       }
@@ -197,9 +230,6 @@ export function activate(context: vscode.ExtensionContext) {
       globalStatusBar.text = `$(folder) Found ${blueprintFiles.length} blueprint(s)`;
       globalStatusBar.show();
       await delay(2000);
-      
-      // START TIMESTAMP TRACKING
-      timestampTracker.start(selectedPath);
     } else {
       // User selected a single file
       blueprintFiles = [selectedPath];
@@ -216,6 +246,37 @@ export function activate(context: vscode.ExtensionContext) {
 
     globalStatusBar.show();
 
+    // We need baseDir early to start timestamp tracking
+    // Parse first blueprint to get rootFolder
+    let firstBlueprintPath: string = '';
+    try {
+      const firstJsonContent = fs.readFileSync(blueprintFiles[0], 'utf-8');
+      const firstBlueprint = JSON.parse(firstJsonContent);
+      if (!firstBlueprint.rootFolder) {
+        globalStatusBar.text = '$(error) First blueprint missing rootFolder';
+        globalStatusBar.show();
+        await delay(3000);
+        globalStatusBar.hide();
+        return;
+      }
+      firstBlueprintPath = path.join(workspaceFolder.uri.fsPath, firstBlueprint.rootFolder);
+    } catch (error) {
+      globalStatusBar.text = '$(error) Failed to parse first blueprint';
+      globalStatusBar.show();
+      await delay(3000);
+      globalStatusBar.hide();
+      return;
+    }
+
+    // START TIMESTAMP TRACKING (always, for any number of blueprints)
+    timestampTracker.start(firstBlueprintPath);
+    globalStatusBar.text = `[00:00:00] $(watch) Timestamp tracking started`;
+    await delay(1500);
+
+    // Start timer to update status bar every second
+    let currentStatusMessage = '$(rocket) Processing...';
+    startTimer(globalStatusBar, () => currentStatusMessage);
+
     // Wrap the entire execution in try-finally to ensure cleanup
     try {
       // Track results for summary at the end
@@ -226,9 +287,9 @@ export function activate(context: vscode.ExtensionContext) {
         const jsonPath = blueprintFiles[fileIndex];
         const fileName = path.basename(jsonPath);
         
-        globalStatusBar.text = `$(file-code) Loading ${fileName}...`;
+        currentStatusMessage = `$(file-code) Loading ${fileName}...`;
         
-        // RECORD START OF THIS BLUEPRINT
+        // RECORD START OF THIS BLUEPRINT (always)
         if (blueprintFiles.length > 1) {
           timestampTracker.recordBlueprintStart(fileName);
         }
@@ -239,11 +300,11 @@ export function activate(context: vscode.ExtensionContext) {
           const jsonContent = fs.readFileSync(jsonPath, 'utf-8');
           blueprint = JSON.parse(jsonContent);
         } catch (error) {
-          globalStatusBar.text = `$(error) Failed to parse ${fileName}`;
+          currentStatusMessage = `$(error) Failed to parse ${fileName}`;
           await delay(3000);
           results.push({ file: fileName, success: false, error: `Parse error: ${error}` });
           
-          // RECORD END EVEN ON ERROR
+          // RECORD END EVEN ON ERROR (always)
           if (blueprintFiles.length > 1) {
             timestampTracker.recordBlueprintEnd();
           }
@@ -253,11 +314,11 @@ export function activate(context: vscode.ExtensionContext) {
 
         // Validate blueprint structure
         if (!blueprint.rootFolder) {
-          globalStatusBar.text = `$(error) ${fileName}: Missing rootFolder`;
+          currentStatusMessage = `$(error) ${fileName}: Missing rootFolder`;
           await delay(3000);
           results.push({ file: fileName, success: false, error: 'Missing rootFolder property' });
           
-          // RECORD END EVEN ON ERROR
+          // RECORD END EVEN ON ERROR (always)
           if (blueprintFiles.length > 1) {
             timestampTracker.recordBlueprintEnd();
           }
@@ -266,11 +327,11 @@ export function activate(context: vscode.ExtensionContext) {
         }
 
         if (!blueprint.actions || !Array.isArray(blueprint.actions)) {
-          globalStatusBar.text = `$(error) ${fileName}: Invalid actions array`;
+          currentStatusMessage = `$(error) ${fileName}: Invalid actions array`;
           await delay(3000);
           results.push({ file: fileName, success: false, error: 'Missing or invalid actions array' });
           
-          // RECORD END EVEN ON ERROR
+          // RECORD END EVEN ON ERROR (always)
           if (blueprintFiles.length > 1) {
             timestampTracker.recordBlueprintEnd();
           }
@@ -288,11 +349,11 @@ export function activate(context: vscode.ExtensionContext) {
             }
           });
         } catch (error) {
-          globalStatusBar.text = `$(error) ${fileName}: ${error}`;
+          currentStatusMessage = `$(error) ${fileName}: ${error}`;
           await delay(3000);
           results.push({ file: fileName, success: false, error: `${error}` });
           
-          // RECORD END EVEN ON ERROR
+          // RECORD END EVEN ON ERROR (always)
           if (blueprintFiles.length > 1) {
             timestampTracker.recordBlueprintEnd();
           }
@@ -318,7 +379,7 @@ export function activate(context: vscode.ExtensionContext) {
           const voiceovers = extractVoiceovers(blueprint.actions, defaultVoice);
           
           if (voiceovers.length > 0) {
-            globalStatusBar.text = `$(sync~spin) Starting audio generation (${voiceovers.length} files)...`;
+            currentStatusMessage = `$(sync~spin) Starting audio generation (${voiceovers.length} files)...`;
             
             const cacheManager = audioHandler.getCacheManager();
             
@@ -351,13 +412,13 @@ export function activate(context: vscode.ExtensionContext) {
             const nextAction = i + 1 < blueprint.actions.length ? blueprint.actions[i + 1] : null;
             const actionName = getActionDescription(action);
             
-            // Update status bar with step progress
-            globalStatusBar.text = `$(rocket) [${i + 1}/${totalActions}] ${actionName}`;
+            // Update current status message for timer
+            currentStatusMessage = `$(rocket) [${i + 1}/${totalActions}] ${actionName}`;
 
             try {
               // Special handling for highlight actions with voiceover
               if (action.type === 'highlight') {
-                await handleHighlightWithVoiceover(action, baseDir, enableVoiceover, defaultVoice, globalStatusBar);
+                await handleHighlightWithVoiceover(action, baseDir, enableVoiceover, defaultVoice, currentStatusMessage, (msg) => { currentStatusMessage = msg; });
                 
                 // Handle cursor positioning after highlight
                 await handlePostHighlight(action, nextAction);
@@ -367,23 +428,23 @@ export function activate(context: vscode.ExtensionContext) {
                 const voiceToUse = action.voice || defaultVoice;
 
                 if (enableVoiceover && voiceoverTiming === 'before') {
-                  globalStatusBar.text = `$(unmute) Playing voiceover...`;
+                  currentStatusMessage = `$(unmute) Playing voiceover...`;
                   await audioHandler.playVoiceover(action.voiceover!, voiceToUse, 'before');
                   // Restore action status after audio
-                  globalStatusBar.text = `$(rocket) [${i + 1}/${totalActions}] ${actionName}`;
+                  currentStatusMessage = `$(rocket) [${i + 1}/${totalActions}] ${actionName}`;
                 }
 
                 let duringAudioPromise: Promise<void> | null = null;
                 if (enableVoiceover && voiceoverTiming === 'during') {
-                  globalStatusBar.text = `$(unmute) ${actionName} + audio`;
+                  currentStatusMessage = `$(unmute) ${actionName} + audio`;
                   duringAudioPromise = audioHandler.playVoiceover(action.voiceover!, voiceToUse, 'during');
                   await delay(100);
                 }
 
-                await executeAction(action, baseDir, globalTypingSpeed, globalStatusBar);
+                await executeAction(action, baseDir, globalTypingSpeed, currentStatusMessage, (msg) => { currentStatusMessage = msg; });
 
                 if (enableVoiceover && voiceoverTiming === 'after') {
-                  globalStatusBar.text = `$(unmute) Playing voiceover...`;
+                  currentStatusMessage = `$(unmute) Playing voiceover...`;
                   await audioHandler.playVoiceover(action.voiceover!, voiceToUse, 'after');
                 }
 
@@ -397,7 +458,7 @@ export function activate(context: vscode.ExtensionContext) {
               // Log the error for this blueprint but don't stop processing
               blueprintSuccess = false;
               blueprintError = `Error at step ${i + 1}: ${error}`;
-              globalStatusBar.text = `$(error) ${fileName} failed at step ${i + 1}`;
+              currentStatusMessage = `$(error) ${fileName} failed at step ${i + 1}`;
               await delay(3000);
               break; // Break out of action loop, but continue to next blueprint
             }
@@ -415,13 +476,13 @@ export function activate(context: vscode.ExtensionContext) {
         // Record result for this blueprint
         if (blueprintSuccess) {
           results.push({ file: fileName, success: true });
-          globalStatusBar.text = `$(check) ${fileName} completed`;
+          currentStatusMessage = `$(check) ${fileName} completed`;
           await delay(2000);
         } else {
           results.push({ file: fileName, success: false, error: blueprintError });
         }
 
-        // RECORD END OF THIS BLUEPRINT
+        // RECORD END OF THIS BLUEPRINT (always)
         if (blueprintFiles.length > 1) {
           timestampTracker.recordBlueprintEnd();
         }
@@ -429,44 +490,50 @@ export function activate(context: vscode.ExtensionContext) {
         // Show transition message between blueprints
         if (fileIndex < blueprintFiles.length - 1) {
           if (blueprintSuccess) {
-            globalStatusBar.text = `$(arrow-right) Moving to next blueprint...`;
+            currentStatusMessage = `$(arrow-right) Moving to next blueprint...`;
           } else {
-            globalStatusBar.text = `$(arrow-right) Skipping to next blueprint...`;
+            currentStatusMessage = `$(arrow-right) Skipping to next blueprint...`;
           }
           await delay(1500);
         }
       }
 
+      // Stop the timer
+      stopTimer();
+
       // Show final summary
       const successCount = results.filter(r => r.success).length;
       const failCount = results.filter(r => !r.success).length;
 
+      const finalTimer = timestampTracker.getElapsedFormatted();
+      
       if (failCount === 0) {
-        globalStatusBar.text = `$(check) All ${blueprintFiles.length} blueprint(s) completed!`;
+        globalStatusBar.text = `${finalTimer} $(check) All ${blueprintFiles.length} blueprint(s) completed!`;
       } else if (successCount === 0) {
-        globalStatusBar.text = `$(error) All ${blueprintFiles.length} blueprint(s) failed`;
+        globalStatusBar.text = `${finalTimer} $(error) All ${blueprintFiles.length} blueprint(s) failed`;
       } else {
-        globalStatusBar.text = `$(warning) ${successCount}/${blueprintFiles.length} blueprints completed`;
+        globalStatusBar.text = `${finalTimer} $(warning) ${successCount}/${blueprintFiles.length} blueprints completed`;
       }
       
-      await delay(5000);
+      await delay(3000);
 
-      // SAVE TIMESTAMPS FILE
-      if (blueprintFiles.length > 1) {
-        timestampTracker.saveTimestamps();
-        globalStatusBar.text = `$(check) Timestamps saved`;
-        await delay(3000);
-      }
+      // SAVE TIMESTAMPS FILE (always)
+      timestampTracker.saveTimestamps();
+      globalStatusBar.text = `${finalTimer} $(check) Timestamps saved to timestamps.txt`;
+      await delay(3000);
       
       globalStatusBar.hide();
     } catch (error) {
       // Handle any unexpected errors
-      globalStatusBar.text = `$(error) Extension error: ${error}`;
+      stopTimer();
+      const finalTimer = timestampTracker.getElapsedFormatted();
+      globalStatusBar.text = `${finalTimer} $(error) Extension error: ${error}`;
       console.error('Extension error:', error);
       await delay(5000);
       globalStatusBar.hide();
     } finally {
       // ALWAYS cleanup any remaining audio files
+      stopTimer();
       console.log('Final cleanup of audio files...');
       audioHandler.getCacheManager().cleanup();
     }
@@ -514,7 +581,8 @@ async function handleHighlightWithVoiceover(
   baseDir: string,
   enableVoiceover: boolean,
   defaultVoice: string,
-  statusBar: vscode.StatusBarItem
+  currentMessage: string,
+  updateMessage: (msg: string) => void
 ): Promise<void> {
   if (!action.path || !action.find) {
     throw new Error('highlight requires path and find');
@@ -577,7 +645,7 @@ async function handleHighlightWithVoiceover(
   const minHighlightDuration = 1000; // Minimum 1 second highlight
 
   if (enableVoiceover && action.voiceover) {
-    statusBar.text = `$(unmute) Playing voiceover...`;
+    updateMessage(`$(unmute) Playing voiceover...`);
     
     if (voiceoverTiming === 'before') {
       await audioHandler.playVoiceover(action.voiceover, voiceToUse, 'before');
@@ -898,14 +966,20 @@ async function typeText(editor: vscode.TextEditor, text: string, speed: number):
   await autoFormatDocument(editor);
 }
 
-async function executeAction(action: Action, baseDir: string, globalTypingSpeed: number, statusBar: vscode.StatusBarItem): Promise<void> {
+async function executeAction(
+  action: Action, 
+  baseDir: string, 
+  globalTypingSpeed: number, 
+  currentMessage: string,
+  updateMessage: (msg: string) => void
+): Promise<void> {
   const typingSpeed = action.typingSpeed || globalTypingSpeed;
 
   switch (action.type) {
     case 'createFolder':
       if (!action.path) throw new Error('createFolder requires path');
       
-      statusBar.text = `$(folder) Creating folder: ${action.path}`;
+      updateMessage(`$(folder) Creating folder: ${action.path}`);
       await vscode.commands.executeCommand('workbench.view.explorer');
       await delay(300);
       
@@ -929,7 +1003,7 @@ async function executeAction(action: Action, baseDir: string, globalTypingSpeed:
     case 'createFile':
       if (!action.path) throw new Error('createFile requires path');
       
-      statusBar.text = `$(file-add) Creating file: ${action.path}`;
+      updateMessage(`$(file-add) Creating file: ${action.path}`);
       await vscode.commands.executeCommand('workbench.view.explorer');
       await delay(300);
       
@@ -954,7 +1028,7 @@ async function executeAction(action: Action, baseDir: string, globalTypingSpeed:
 
     case 'openFile':
       if (!action.path) throw new Error('openFile requires path');
-      statusBar.text = `$(file-code) Opening: ${action.path}`;
+      updateMessage(`$(file-code) Opening: ${action.path}`);
       const openPath = path.join(baseDir, action.path);
       const doc = await vscode.workspace.openTextDocument(openPath);
       await vscode.window.showTextDocument(doc);
@@ -966,22 +1040,22 @@ async function executeAction(action: Action, baseDir: string, globalTypingSpeed:
       const editor = vscode.window.activeTextEditor;
       if (!editor) throw new Error('No active editor');
       
-      statusBar.text = `$(edit) Writing text...`;
+      updateMessage(`$(edit) Writing text...`);
       await typeText(editor, action.content, typingSpeed);
       break;
 
     case 'insert':
-      statusBar.text = `$(add) Inserting code...`;
+      updateMessage(`$(add) Inserting code...`);
       await handleInsert(action, typingSpeed);
       break;
 
     case 'delete':
-      statusBar.text = `$(trash) Deleting code...`;
+      updateMessage(`$(trash) Deleting code...`);
       await handleDelete(action);
       break;
 
     case 'replace':
-      statusBar.text = `$(replace) Replacing code...`;
+      updateMessage(`$(replace) Replacing code...`);
       await handleReplace(action, typingSpeed);
       break;
 
@@ -1309,6 +1383,8 @@ function findPattern(
 
 export function deactivate() {
   console.log('JSON Project Builder deactivating...');
+  
+  stopTimer();
   
   if (audioHandler) {
     audioHandler.cleanup();
