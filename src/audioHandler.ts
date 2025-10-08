@@ -1,66 +1,60 @@
-import { UniversalEdgeTTS } from 'edge-tts-universal';
+// audioHandler.ts
 import * as fs from 'fs';
-import * as path from 'path';
-import * as os from 'os';
 import { exec } from 'child_process';
+import { AudioCacheManager } from './audioCacheManager';
 
 export class AudioHandler {
-  private tempDir: string;
+  private cacheManager: AudioCacheManager;
 
   constructor() {
-    this.tempDir = path.join(os.tmpdir(), 'vscode-tutorial-audio');
-    if (!fs.existsSync(this.tempDir)) {
-      fs.mkdirSync(this.tempDir, { recursive: true });
-    }
+    this.cacheManager = new AudioCacheManager();
   }
 
   /**
-   * Generate and play voiceover using EdgeTTS
+   * Get the cache manager instance
+   */
+  getCacheManager(): AudioCacheManager {
+    return this.cacheManager;
+  }
+
+  /**
+   * Play voiceover using pre-cached audio and delete it after use
    */
   async playVoiceover(
     text: string, 
     voice: string = 'en-US-AriaNeural',
     timing: 'before' | 'after' | 'during' = 'before'
   ): Promise<void> {
-    const audioFile = path.join(this.tempDir, `audio_${Date.now()}.mp3`);
-
     try {
-      console.log('Generating audio:', text.substring(0, 50) + '...');
+      console.log('Playing voiceover:', text.substring(0, 50) + '...');
 
-      // Generate audio using edge-tts-universal
-      const tts = new UniversalEdgeTTS(text, voice);
-      const result = await tts.synthesize();
+      // Get audio from cache (will wait if still generating)
+      const audioFile = await this.cacheManager.getAudioPath(text, voice);
 
-      if (!result.audio) {
-        throw new Error('No audio data received from EdgeTTS');
+      if (!audioFile) {
+        console.warn('Audio file not available, skipping voiceover');
+        return;
       }
-
-      // Convert Blob to Buffer for Node.js
-      let audioBuffer: Buffer;
-      if (result.audio instanceof Blob) {
-        const arrayBuffer = await result.audio.arrayBuffer();
-        audioBuffer = Buffer.from(arrayBuffer);
-      } else {
-        audioBuffer = Buffer.from(result.audio);
-      }
-
-      // Save audio to temp file for playback
-      fs.writeFileSync(audioFile, audioBuffer);
-      console.log('Audio file created:', audioFile, 'Size:', audioBuffer.length, 'bytes');
 
       // Play the audio
       await this.playAudioFile(audioFile);
       console.log('Audio playback completed');
+
+      // Delete the audio file after use
+      this.cacheManager.deleteAudioFile(text, voice);
 
       // Small delay after audio
       await this.delay(300);
 
     } catch (error) {
       console.error('Voiceover error:', error);
-      throw error;
-    } finally {
-      // Clean up the temp playback file
-      this.cleanupAudioFile(audioFile);
+      // Even on error, try to delete the file
+      try {
+        this.cacheManager.deleteAudioFile(text, voice);
+      } catch (deleteError) {
+        console.error('Error deleting audio file after error:', deleteError);
+      }
+      // Don't throw - continue execution even if audio fails
     }
   }
 
@@ -69,6 +63,11 @@ export class AudioHandler {
    */
   private async playAudioFile(filePath: string): Promise<void> {
     return new Promise((resolve, reject) => {
+      if (!fs.existsSync(filePath)) {
+        reject(new Error('Audio file not found'));
+        return;
+      }
+
       const stats = fs.statSync(filePath);
       console.log('Audio file size:', stats.size, 'bytes');
 
@@ -103,31 +102,10 @@ export class AudioHandler {
   }
 
   /**
-   * Clean up temporary audio file
-   */
-  private cleanupAudioFile(filePath: string): void {
-    try {
-      if (fs.existsSync(filePath)) {
-        fs.unlinkSync(filePath);
-        console.log('Cleaned up audio file:', filePath);
-      }
-    } catch (error) {
-      console.error('Error cleaning up audio file:', error);
-    }
-  }
-
-  /**
-   * Clean up all temporary files
+   * Clean up all temporary files and cache
    */
   cleanup(): void {
-    try {
-      if (fs.existsSync(this.tempDir)) {
-        fs.rmSync(this.tempDir, { recursive: true, force: true });
-        console.log('Cleaned up temp directory');
-      }
-    } catch (error) {
-      console.error('Error cleaning up temp directory:', error);
-    }
+    this.cacheManager.cleanup();
   }
 
   /**
