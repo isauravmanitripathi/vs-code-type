@@ -4,7 +4,8 @@ import * as path from 'path';
 import { AudioHandler } from './audioHandler';
 
 interface Action {
-  type: 'createFolder' | 'createFile' | 'openFile' | 'writeText' | 'insert' | 'delete' | 'replace' | 'highlight';
+  type?: 'createFolder' | 'createFile' | 'openFile' | 'writeText' | 'insert' | 'delete' | 'replace' | 'highlight';
+  action?: 'createFolder' | 'createFile' | 'openFile' | 'writeText' | 'insert' | 'delete' | 'replace' | 'highlight';
   path?: string;
   content?: string;
   
@@ -45,6 +46,49 @@ let audioHandler: AudioHandler;
 
 // Global decoration type for highlights
 let currentHighlightDecoration: vscode.TextEditorDecorationType | null = null;
+
+/**
+ * Remove Python docstrings (triple quotes) from content
+ * Removes both """ and ''' style docstrings
+ */
+function removePythonDocstrings(content: string): string {
+  // Remove triple double quotes docstrings
+  let cleaned = content.replace(/"""\s*[\s\S]*?\s*"""/g, '');
+  
+  // Remove triple single quotes docstrings
+  cleaned = cleaned.replace(/'''\s*[\s\S]*?\s*'''/g, '');
+  
+  // Clean up any extra blank lines that might result from removal
+  // But preserve intentional spacing (max 2 consecutive newlines)
+  cleaned = cleaned.replace(/\n{3,}/g, '\n\n');
+  
+  return cleaned;
+}
+
+/**
+ * Normalize action to ensure it has a 'type' property
+ * Supports both 'type' and 'action' for compatibility
+ */
+function normalizeAction(action: Action): Action {
+  const normalized = { ...action };
+  
+  // If 'action' is provided but not 'type', copy it over
+  if (action.action && !action.type) {
+    normalized.type = action.action;
+  }
+  
+  // If neither is provided, throw error
+  if (!normalized.type) {
+    throw new Error('Action must have either "type" or "action" property');
+  }
+  
+  // Clean docstrings from content if present
+  if (normalized.content) {
+    normalized.content = removePythonDocstrings(normalized.content);
+  }
+  
+  return normalized;
+}
 
 export function activate(context: vscode.ExtensionContext) {
   console.log('JSON Project Builder is now active!');
@@ -95,6 +139,9 @@ export function activate(context: vscode.ExtensionContext) {
       return;
     }
 
+    // Track results for summary at the end
+    const results: { file: string; success: boolean; error?: string }[] = [];
+
     // Process each blueprint file
     for (let fileIndex = 0; fileIndex < blueprintFiles.length; fileIndex++) {
       const jsonPath = blueprintFiles[fileIndex];
@@ -107,7 +154,36 @@ export function activate(context: vscode.ExtensionContext) {
         blueprint = JSON.parse(jsonContent);
       } catch (error) {
         vscode.window.showErrorMessage(`Failed to parse ${fileName}: ${error}`);
+        results.push({ file: fileName, success: false, error: `Parse error: ${error}` });
         continue; // Skip this file and continue with next
+      }
+
+      // Validate blueprint structure
+      if (!blueprint.rootFolder) {
+        vscode.window.showErrorMessage(`${fileName}: Missing 'rootFolder' property`);
+        results.push({ file: fileName, success: false, error: 'Missing rootFolder property' });
+        continue;
+      }
+
+      if (!blueprint.actions || !Array.isArray(blueprint.actions)) {
+        vscode.window.showErrorMessage(`${fileName}: Missing or invalid 'actions' array`);
+        results.push({ file: fileName, success: false, error: 'Missing or invalid actions array' });
+        continue;
+      }
+
+      // Normalize all actions
+      try {
+        blueprint.actions = blueprint.actions.map((action, idx) => {
+          try {
+            return normalizeAction(action);
+          } catch (err) {
+            throw new Error(`Action ${idx + 1}: ${err}`);
+          }
+        });
+      } catch (error) {
+        vscode.window.showErrorMessage(`${fileName}: ${error}`);
+        results.push({ file: fileName, success: false, error: `${error}` });
+        continue;
       }
 
       const baseDir = path.join(workspaceFolder.uri.fsPath, blueprint.rootFolder);
@@ -130,6 +206,10 @@ export function activate(context: vscode.ExtensionContext) {
         : fileName;
 
       const totalActions = blueprint.actions.length;
+
+      // Flag to track if this blueprint completed successfully
+      let blueprintSuccess = true;
+      let blueprintError = '';
 
       for (let i = 0; i < blueprint.actions.length; i++) {
         const action = blueprint.actions[i];
@@ -180,24 +260,54 @@ export function activate(context: vscode.ExtensionContext) {
           
           await delay(actionDelay);
         } catch (error) {
-          statusBarItem.dispose();
-          vscode.window.showErrorMessage(`Error in ${fileName} at step ${i + 1}: ${error}`);
-          return;
+          // Log the error for this blueprint but don't stop processing
+          blueprintSuccess = false;
+          blueprintError = `Error at step ${i + 1}: ${error}`;
+          statusBarItem.text = `$(error) ${fileName} failed at step ${i + 1}`;
+          vscode.window.showErrorMessage(`${fileName} failed at step ${i + 1}: ${error}`);
+          await delay(2000);
+          break; // Break out of action loop, but continue to next blueprint
         }
       }
 
-      statusBarItem.text = `$(check) ${blueprintTitle} completed!`;
-      await delay(2000);
       statusBarItem.dispose();
 
-      // Show message between blueprints
+      // Record result for this blueprint
+      if (blueprintSuccess) {
+        results.push({ file: fileName, success: true });
+        vscode.window.showInformationMessage(`✅ ${fileName} completed successfully!`);
+      } else {
+        results.push({ file: fileName, success: false, error: blueprintError });
+      }
+
+      await delay(2000);
+
+      // Show transition message between blueprints
       if (fileIndex < blueprintFiles.length - 1) {
-        vscode.window.showInformationMessage(`✅ ${fileName} completed! Starting next blueprint...`);
-        await delay(2000);
+        if (blueprintSuccess) {
+          vscode.window.showInformationMessage(`Moving to next blueprint...`);
+        } else {
+          vscode.window.showWarningMessage(`Skipping to next blueprint after error...`);
+        }
+        await delay(1000);
       }
     }
 
-    vscode.window.showInformationMessage(`✅ All ${blueprintFiles.length} blueprint(s) completed successfully!`);
+    // Show final summary
+    const successCount = results.filter(r => r.success).length;
+    const failCount = results.filter(r => !r.success).length;
+
+    if (failCount === 0) {
+      vscode.window.showInformationMessage(`✅ All ${blueprintFiles.length} blueprint(s) completed successfully!`);
+    } else if (successCount === 0) {
+      vscode.window.showErrorMessage(`❌ All ${blueprintFiles.length} blueprint(s) failed!`);
+    } else {
+      // Mixed results - show detailed summary
+      const failedFiles = results.filter(r => !r.success).map(r => r.file).join(', ');
+      vscode.window.showWarningMessage(
+        `⚠️ Completed ${successCount}/${blueprintFiles.length} blueprints. Failed: ${failedFiles}`
+      );
+    }
   });
 
   context.subscriptions.push(disposable);
@@ -225,7 +335,7 @@ function getActionDescription(action: Action): string {
     case 'highlight':
       return `Highlighting: ${action.find?.substring(0, 30)}...`;
     default:
-      return action.type;
+      return action.type || 'Unknown action';
   }
 }
 
