@@ -1,0 +1,91 @@
+{
+    "rootFolder": "daily-motivator-gui",
+    "globalTypingSpeed": 35,
+    "enableVoiceover": true,
+    "actions": [
+        {
+            "type": "createFolder",
+            "path": "src",
+            "voiceover": "We'll need a clean source folder for our application modules."
+        },
+        {
+            "type": "createFile",
+            "path": "src/quotes_db.py",
+            "voiceover": "First, let's create a database file to hold our motivational quotes."
+        },
+        {
+            "type": "openFile",
+            "path": "src/quotes_db.py",
+            "voiceover": "This module will handle data storage and retrieval."
+        },
+        {
+            "type": "writeText",
+            "content": "import random\n\nclass QuoteDatabase:\n    def __init__(self):\n        self.quotes = [\n            \"Believe you can and you're halfway there.\",\n            \"The only way to do great work is to love what you do.\",\n            \"It always seems impossible until it's done.\"\n        ]\n\n    def get_random_quote(self):\n        return random.choice(self.quotes)",
+            "highlight": true,
+            "voiceover": "We define a simple class initialized with a few inspirational quotes."
+        },
+        {
+            "type": "insert",
+            "after": "def get_random_quote(self):",
+            "content": "\n    def add_quote(self, new_quote):\n        if new_quote and new_quote not in self.quotes:\n            self.quotes.append(new_quote)\n            return True\n        return False",
+            "highlight": true,
+            "voiceover": "Let's add a method to allow users to add their own quotes dynamically."
+        },
+        {
+            "type": "createFile",
+            "path": "src/gui_app.py",
+            "voiceover": "Now for the fun part: Building the Graphical User Interface."
+        },
+        {
+            "type": "openFile",
+            "path": "src/gui_app.py"
+        },
+        {
+            "type": "writeText",
+            "content": "import tkinter as tk\nfrom tkinter import messagebox\nfrom src.quotes_db import QuoteDatabase\n\nclass MotivatorApp:\n    def __init__(self, root):\n        self.db = QuoteDatabase()\n        self.root = root\n        self.root.title(\"Daily Motivator\")\n        self.root.geometry(\"400x300\")\n        \n        self.setup_ui()\n\n    def setup_ui(self):\n        # Main Label\n        self.label = tk.Label(self.root, text=\"Ready to be inspired?\", wraplength=350, font=(\"Helvetica\", 14))\n        self.label.pack(pady=40)\n\n        # Inspire Button\n        self.btn_inspire = tk.Button(self.root, text=\"Inspire Me!\", command=self.show_quote, bg=\"#4CAF50\", fg=\"white\")\n        self.btn_inspire.pack(pady=10)\n\n    def show_quote(self):\n        quote = self.db.get_random_quote()\n        self.label.config(text=quote)",
+            "highlight": true,
+            "voiceover": "We're setting up the main window using Tkinter, including a label for text and a button to trigger the action."
+        },
+        {
+            "type": "insert",
+            "after": "self.btn_inspire.pack(pady=10)",
+            "content": "\n        # Quit Button\n        self.btn_quit = tk.Button(self.root, text=\"Exit\", command=self.root.quit, bg=\"#f44336\", fg=\"white\")\n        self.btn_quit.pack(side=tk.BOTTOM, pady=20)",
+            "highlight": true,
+            "voiceover": "It's always good practice to include a clean exit button for your application."
+        },
+        {
+            "type": "createFile",
+            "path": "main.py",
+            "voiceover": "Finally, we create the entry point to launch our application."
+        },
+        {
+            "type": "openFile",
+            "path": "main.py"
+        },
+        {
+            "type": "writeText",
+            "content": "import tkinter as tk\nfrom src.gui_app import MotivatorApp\n\nif __name__ == \"__main__\":\n    root = tk.Tk()\n    app = MotivatorApp(root)\n    root.mainloop()",
+            "highlight": true,
+            "voiceover": "This strict separation of concerns makes our code clean and professional."
+        },
+        {
+            "type": "openFile",
+            "path": "src/gui_app.py",
+            "voiceover": "Wait, I want to improve the UI slightly."
+        },
+        {
+            "type": "insert",
+            "before": "self.btn_inspire = tk.Button",
+            "content": "        # Input field for new quotes\n        self.entry_frame = tk.Frame(self.root)\n        self.entry_frame.pack(pady=10)\n        \n        self.new_quote_entry = tk.Entry(self.entry_frame, width=30)\n        self.new_quote_entry.pack(side=tk.LEFT, padx=5)\n        \n        self.btn_add = tk.Button(self.entry_frame, text=\"Add\", command=self.add_new_quote)\n        self.btn_add.pack(side=tk.LEFT)\n",
+            "highlight": true,
+            "voiceover": "Let's add an input field so users can contribute their own happiness."
+        },
+        {
+            "type": "insert",
+            "before": "def show_quote(self):",
+            "content": "\n    def add_new_quote(self):\n        text = self.new_quote_entry.get()\n        if self.db.add_quote(text):\n            messagebox.showinfo(\"Success\", \"Quote added successfully!\")\n            self.new_quote_entry.delete(0, tk.END)\n        else:\n            messagebox.showwarning(\"Warning\", \"Please enter a unique quote.\")\n",
+            "highlight": true,
+            "voiceover": "And the corresponding logic to handle the add button click."
+        }
+    ]
+}

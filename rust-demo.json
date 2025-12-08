@@ -1,0 +1,261 @@
+{
+    "rootFolder": "rust-task-scheduler",
+    "globalTypingSpeed": 30,
+    "actionDelay": 1000,
+    "enableVoiceover": true,
+    "defaultVoice": "en-US-GuyNeural",
+    "actions": [
+        {
+            "type": "createFolder",
+            "path": "src",
+            "voiceover": "Let's build a concurrent task scheduler in Rust."
+        },
+        {
+            "type": "createFile",
+            "path": "Cargo.toml",
+            "voiceover": "First, we define our project manifest."
+        },
+        {
+            "type": "openFile",
+            "path": "Cargo.toml"
+        },
+        {
+            "type": "writeText",
+            "content": "[package]\nname = \"task-scheduler\"\nversion = \"0.1.0\"\nedition = \"2021\"\n\n[dependencies]\ntokio = { version = \"1.0\", features = [\"full\"] }\nchrono = \"0.4\"",
+            "highlight": true,
+            "voiceover": "We'll use Tokio for async runtime and Chrono for time handling."
+        },
+        {
+            "type": "createFile",
+            "path": "src/task.rs",
+            "voiceover": "Now let's define our Task structure."
+        },
+        {
+            "type": "openFile",
+            "path": "src/task.rs"
+        },
+        {
+            "type": "writeText",
+            "content": "use std::fmt;\nuse chrono::{DateTime, Utc};\n\n#[derive(Debug, Clone)]\npub enum TaskPriority {\n    Low,\n    Medium,\n    High,\n    Critical,\n}\n\n#[derive(Debug, Clone)]\npub enum TaskStatus {\n    Pending,\n    Running,\n    Completed,\n    Failed(String),\n}\n\n#[derive(Debug, Clone)]\npub struct Task {\n    pub id: u64,\n    pub name: String,\n    pub priority: TaskPriority,\n    pub status: TaskStatus,\n    pub created_at: DateTime<Utc>,\n}",
+            "highlight": true,
+            "voiceover": "Our Task struct has an ID, name, priority, status, and creation timestamp."
+        },
+        {
+            "type": "highlight",
+            "path": "src/task.rs",
+            "find": "#[derive(Debug, Clone)]",
+            "near": "TaskPriority",
+            "voiceover": "The derive macro automatically implements Debug and Clone traits for our enums.",
+            "voiceoverTiming": "during",
+            "moveCursor": "stay"
+        },
+        {
+            "type": "highlight",
+            "path": "src/task.rs",
+            "find": "Failed(String)",
+            "voiceover": "Notice Failed holds an error message. This is Rust's way of attaching data to enum variants.",
+            "voiceoverTiming": "during",
+            "moveCursor": "stay"
+        },
+        {
+            "type": "openFile",
+            "path": "src/task.rs",
+            "voiceover": "Back to task.rs to add the implementation block."
+        },
+        {
+            "type": "insert",
+            "after": "pub created_at: DateTime<Utc>,",
+            "content": "\n}\n\nimpl Task {\n    pub fn new(id: u64, name: &str, priority: TaskPriority) -> Self {\n        Task {\n            id,\n            name: name.to_string(),\n            priority,\n            status: TaskStatus::Pending,\n            created_at: Utc::now(),\n        }\n    }\n\n    pub fn mark_running(&mut self) {\n        self.status = TaskStatus::Running;\n    }\n\n    pub fn mark_completed(&mut self) {\n        self.status = TaskStatus::Completed;\n    }\n\n    pub fn mark_failed(&mut self, reason: &str) {\n        self.status = TaskStatus::Failed(reason.to_string());\n    }\n\n    pub fn is_pending(&self) -> bool {\n        matches!(self.status, TaskStatus::Pending)\n    }",
+            "highlight": true,
+            "voiceover": "Adding constructor and status mutation methods."
+        },
+        {
+            "type": "createFile",
+            "path": "src/scheduler.rs",
+            "voiceover": "Now the heart of our application - the Scheduler."
+        },
+        {
+            "type": "openFile",
+            "path": "src/scheduler.rs"
+        },
+        {
+            "type": "writeText",
+            "content": "use std::collections::VecDeque;\nuse std::sync::{Arc, Mutex};\nuse crate::task::{Task, TaskPriority, TaskStatus};\n\npub struct Scheduler {\n    tasks: Arc<Mutex<VecDeque<Task>>>,\n    next_id: Arc<Mutex<u64>>,\n}",
+            "highlight": true,
+            "voiceover": "The scheduler uses Arc and Mutex for thread-safe shared state."
+        },
+        {
+            "type": "highlight",
+            "path": "src/task.rs",
+            "find": "pub struct Task {",
+            "voiceover": "Remember our Task struct? The scheduler will manage a queue of these.",
+            "voiceoverTiming": "during",
+            "moveCursor": "stay"
+        },
+        {
+            "type": "highlight",
+            "path": "src/scheduler.rs",
+            "find": "Arc<Mutex<VecDeque<Task>>>",
+            "voiceover": "Arc allows multiple ownership across threads. Mutex ensures only one thread accesses the queue at a time.",
+            "voiceoverTiming": "during",
+            "moveCursor": "stay"
+        },
+        {
+            "type": "openFile",
+            "path": "src/scheduler.rs",
+            "voiceover": "Let's implement the Scheduler."
+        },
+        {
+            "type": "insert",
+            "after": "next_id: Arc<Mutex<u64>>,",
+            "content": "\n}\n\nimpl Scheduler {\n    pub fn new() -> Self {\n        Scheduler {\n            tasks: Arc::new(Mutex::new(VecDeque::new())),\n            next_id: Arc::new(Mutex::new(1)),\n        }\n    }\n\n    pub fn add_task(&self, name: &str, priority: TaskPriority) -> u64 {\n        let mut id_guard = self.next_id.lock().unwrap();\n        let id = *id_guard;\n        *id_guard += 1;\n        drop(id_guard);\n\n        let task = Task::new(id, name, priority);\n        self.tasks.lock().unwrap().push_back(task);\n        id\n    }\n\n    pub fn get_next_task(&self) -> Option<Task> {\n        let mut tasks = self.tasks.lock().unwrap();\n        tasks.iter().position(|t| t.is_pending())\n            .map(|idx| tasks.remove(idx).unwrap())\n    }\n\n    pub fn task_count(&self) -> usize {\n        self.tasks.lock().unwrap().len()\n    }",
+            "highlight": true,
+            "voiceover": "Core scheduler methods: add tasks, get next pending task, count tasks."
+        },
+        {
+            "type": "highlight",
+            "path": "src/scheduler.rs",
+            "find": "drop(id_guard);",
+            "voiceover": "We explicitly drop the lock here to release it before acquiring the tasks lock. This prevents potential deadlocks.",
+            "voiceoverTiming": "during",
+            "moveCursor": "stay"
+        },
+        {
+            "type": "createFile",
+            "path": "src/worker.rs",
+            "voiceover": "Now let's create worker threads that process tasks."
+        },
+        {
+            "type": "openFile",
+            "path": "src/worker.rs"
+        },
+        {
+            "type": "writeText",
+            "content": "use std::sync::Arc;\nuse tokio::time::{sleep, Duration};\nuse crate::scheduler::Scheduler;\nuse crate::task::Task;\n\npub struct Worker {\n    id: u32,\n    scheduler: Arc<Scheduler>,\n}\n\nimpl Worker {\n    pub fn new(id: u32, scheduler: Arc<Scheduler>) -> Self {\n        Worker { id, scheduler }\n    }\n\n    pub async fn run(&self) {\n        println!(\"Worker {} started\", self.id);\n        \n        loop {\n            if let Some(mut task) = self.scheduler.get_next_task() {\n                self.process_task(&mut task).await;\n            } else {\n                sleep(Duration::from_millis(100)).await;\n            }\n        }\n    }\n\n    async fn process_task(&self, task: &mut Task) {\n        println!(\"Worker {}: Processing task {} - {}\", self.id, task.id, task.name);\n        task.mark_running();\n        \n        // Simulate work\n        sleep(Duration::from_secs(1)).await;\n        \n        task.mark_completed();\n        println!(\"Worker {}: Completed task {}\", self.id, task.id);\n    }\n}",
+            "highlight": true,
+            "voiceover": "Workers poll the scheduler for tasks and process them asynchronously."
+        },
+        {
+            "type": "highlight",
+            "path": "src/scheduler.rs",
+            "find": "pub fn get_next_task(&self) -> Option<Task>",
+            "voiceover": "This is the method our worker calls to fetch the next available task.",
+            "voiceoverTiming": "during",
+            "moveCursor": "stay"
+        },
+        {
+            "type": "highlight",
+            "path": "src/worker.rs",
+            "find": "sleep(Duration::from_millis(100)).await;",
+            "voiceover": "When no tasks are available, we sleep briefly to avoid busy-waiting and wasting CPU cycles.",
+            "voiceoverTiming": "during",
+            "moveCursor": "stay"
+        },
+        {
+            "type": "createFile",
+            "path": "src/lib.rs",
+            "voiceover": "Creating the library root to expose our modules."
+        },
+        {
+            "type": "openFile",
+            "path": "src/lib.rs"
+        },
+        {
+            "type": "writeText",
+            "content": "pub mod task;\npub mod scheduler;\npub mod worker;",
+            "highlight": true,
+            "voiceover": "Rust requires explicit module declarations in lib.rs."
+        },
+        {
+            "type": "createFile",
+            "path": "src/main.rs",
+            "voiceover": "Finally, our main entry point."
+        },
+        {
+            "type": "openFile",
+            "path": "src/main.rs"
+        },
+        {
+            "type": "writeText",
+            "content": "use std::sync::Arc;\nuse task_scheduler::scheduler::Scheduler;\nuse task_scheduler::worker::Worker;\nuse task_scheduler::task::TaskPriority;\n\n#[tokio::main]\nasync fn main() {\n    let scheduler = Arc::new(Scheduler::new());\n    \n    // Add some tasks\n    scheduler.add_task(\"Send emails\", TaskPriority::High);\n    scheduler.add_task(\"Generate report\", TaskPriority::Medium);\n    scheduler.add_task(\"Cleanup temp files\", TaskPriority::Low);\n    scheduler.add_task(\"Database backup\", TaskPriority::Critical);\n    \n    println!(\"Added {} tasks\", scheduler.task_count());\n    \n    // Spawn workers\n    let mut handles = vec![];\n    for i in 1..=3 {\n        let worker = Worker::new(i, Arc::clone(&scheduler));\n        handles.push(tokio::spawn(async move {\n            worker.run().await;\n        }));\n    }\n    \n    // Let workers run for a bit\n    tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;\n    println!(\"Shutting down...\");\n}",
+            "highlight": true,
+            "voiceover": "We create a scheduler, add tasks, spawn three workers, and let them run."
+        },
+        {
+            "type": "highlight",
+            "path": "src/main.rs",
+            "find": "#[tokio::main]",
+            "voiceover": "This attribute macro transforms main into an async function with a Tokio runtime.",
+            "voiceoverTiming": "during",
+            "moveCursor": "stay"
+        },
+        {
+            "type": "highlight",
+            "path": "src/main.rs",
+            "find": "Arc::clone(&scheduler)",
+            "voiceover": "We clone the Arc, not the scheduler itself. Each worker gets a reference to the same scheduler.",
+            "voiceoverTiming": "during",
+            "moveCursor": "stay"
+        },
+        {
+            "type": "highlight",
+            "path": "src/task.rs",
+            "find": "pub enum TaskPriority {",
+            "voiceover": "Looking back at our priority enum - we could extend this to sort tasks by priority.",
+            "voiceoverTiming": "during",
+            "moveCursor": "stay"
+        },
+        {
+            "type": "openFile",
+            "path": "src/scheduler.rs",
+            "voiceover": "Let's add priority-based scheduling to the Scheduler."
+        },
+        {
+            "type": "insert",
+            "after": "pub fn task_count(&self) -> usize {",
+            "content": "\n    pub fn get_highest_priority_task(&self) -> Option<Task> {\n        let mut tasks = self.tasks.lock().unwrap();\n        \n        // Find highest priority pending task\n        let best_idx = tasks.iter().enumerate()\n            .filter(|(_, t)| t.is_pending())\n            .max_by_key(|(_, t)| match t.priority {\n                TaskPriority::Critical => 4,\n                TaskPriority::High => 3,\n                TaskPriority::Medium => 2,\n                TaskPriority::Low => 1,\n            })\n            .map(|(idx, _)| idx);\n        \n        best_idx.and_then(|idx| tasks.remove(idx))\n    }",
+            "highlight": true,
+            "voiceover": "This method finds and returns the highest priority pending task."
+        },
+        {
+            "type": "highlight",
+            "path": "src/scheduler.rs",
+            "find": "max_by_key",
+            "voiceover": "max_by_key finds the element with the highest key value - perfect for priority comparison.",
+            "voiceoverTiming": "during",
+            "moveCursor": "stay"
+        },
+        {
+            "type": "openFile",
+            "path": "src/worker.rs",
+            "voiceover": "Now let's update the worker to use priority scheduling."
+        },
+        {
+            "type": "replace",
+            "find": "self.scheduler.get_next_task()",
+            "with": "self.scheduler.get_highest_priority_task()",
+            "voiceover": "Switching from FIFO to priority-based task selection."
+        },
+        {
+            "type": "highlight",
+            "path": "src/worker.rs",
+            "find": "get_highest_priority_task()",
+            "voiceover": "Workers now always grab the most important task first.",
+            "voiceoverTiming": "during",
+            "moveCursor": "stay"
+        },
+        {
+            "type": "openFile",
+            "path": "src/main.rs",
+            "voiceover": "Our Rust concurrent task scheduler is complete!"
+        },
+        {
+            "type": "highlight",
+            "path": "src/main.rs",
+            "find": "TaskPriority::Critical",
+            "voiceover": "The database backup is Critical priority - it will be processed first!",
+            "voiceoverTiming": "during",
+            "moveCursor": "endOfFile"
+        }
+    ]
+}

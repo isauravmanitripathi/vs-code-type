@@ -33,6 +33,9 @@ interface Action {
 
   // Highlight cursor control
   moveCursor?: 'newLineAfter' | 'newLineBefore' | 'sameLine' | 'endOfFile' | 'stay' | 'nextBlankLine';
+
+  // Auto-highlight executed change
+  highlight?: boolean;
 }
 
 interface Blueprint {
@@ -57,24 +60,6 @@ let globalStatusBar: vscode.StatusBarItem;
 let timerInterval: NodeJS.Timeout | null = null;
 
 /**
- * Remove Python docstrings (triple quotes) from content
- * Removes both """ and ''' style docstrings
- */
-function removePythonDocstrings(content: string): string {
-  // Remove triple double quotes docstrings
-  let cleaned = content.replace(/"""\s*[\s\S]*?\s*"""/g, '');
-
-  // Remove triple single quotes docstrings
-  cleaned = cleaned.replace(/'''\s*[\s\S]*?\s*'''/g, '');
-
-  // Clean up any extra blank lines that might result from removal
-  // But preserve intentional spacing (max 2 consecutive newlines)
-  cleaned = cleaned.replace(/\n{3,}/g, '\n\n');
-
-  return cleaned;
-}
-
-/**
  * Normalize action to ensure it has a 'type' property
  * Supports both 'type' and 'action' for compatibility
  */
@@ -89,11 +74,6 @@ function normalizeAction(action: Action): Action {
   // If neither is provided, throw error
   if (!normalized.type) {
     throw new Error('Action must have either "type" or "action" property');
-  }
-
-  // Clean docstrings from content if present
-  if (normalized.content) {
-    normalized.content = removePythonDocstrings(normalized.content);
   }
 
   return normalized;
@@ -460,7 +440,65 @@ export function activate(context: vscode.ExtensionContext) {
                 }
 
                 console.log(`⚙️  Executing ${action.type} action...`);
+
+                // Capture state before action for highlight logic
+                const editorBefore = vscode.window.activeTextEditor;
+                const lineCountBefore = editorBefore ? editorBefore.document.lineCount : 0;
+                const cursorLineBefore = editorBefore ? editorBefore.selection.active.line : 0;
+
+                // EXECUTE ACTION
                 await executeAction(action, baseDir, globalTypingSpeed, currentStatusMessage, (msg) => { currentStatusMessage = msg; });
+
+                // HANDLE AUTO-HIGHLIGHT (if requested)
+                if (action.highlight && editorBefore) {
+                  const editorAfter = vscode.window.activeTextEditor;
+                  if (editorAfter) {
+                    const lineCountAfter = editorAfter.document.lineCount;
+                    const cursorLineAfter = editorAfter.selection.active.line;
+
+                    // Calculate how many NEW lines were added
+                    const newLinesAdded = lineCountAfter - lineCountBefore;
+
+                    // The new content spans from (cursorLineAfter - newLinesAdded + 1) to cursorLineAfter
+                    // But we also typed on the line we landed on, so:
+                    let highlightStartLine: number;
+                    let highlightEndLine = cursorLineAfter;
+
+                    if (newLinesAdded > 0) {
+                      // Multi-line insert: start is where content began
+                      highlightStartLine = Math.max(0, cursorLineAfter - newLinesAdded);
+                    } else {
+                      // Single line edit: just highlight current line
+                      highlightStartLine = cursorLineAfter;
+                    }
+
+                    const startPos = new vscode.Position(highlightStartLine, 0);
+                    const endPos = editorAfter.document.lineAt(highlightEndLine).range.end;
+                    const highlightRange = new vscode.Range(startPos, endPos);
+
+                    // Apply transient highlight (softer color, shorter duration)
+                    currentHighlightDecoration = vscode.window.createTextEditorDecorationType({
+                      backgroundColor: 'rgba(100, 200, 100, 0.2)',
+                      border: '1px solid rgba(100, 200, 100, 0.5)',
+                      borderRadius: '3px',
+                      isWholeLine: true
+                    });
+
+                    editorAfter.setDecorations(currentHighlightDecoration, [highlightRange]);
+
+                    // Brief highlight - just enough to see what was added
+                    await delay(800);
+
+                    // Clean up immediately unless voiceover is pending
+                    if (!action.voiceover || voiceoverTiming !== 'after') {
+                      if (currentHighlightDecoration) {
+                        currentHighlightDecoration.dispose();
+                        currentHighlightDecoration = null;
+                      }
+                    }
+                  }
+                }
+
                 console.log(`✅ ${action.type} completed successfully`);
 
                 if (enableVoiceover && voiceoverTiming === 'after') {
@@ -472,6 +510,12 @@ export function activate(context: vscode.ExtensionContext) {
                 if (duringAudioPromise) {
                   await duringAudioPromise;
                   console.log(`🎤 Voiceover completed`);
+                }
+
+                // Cleanup auto-highlight
+                if (action.highlight && currentHighlightDecoration) {
+                  currentHighlightDecoration.dispose();
+                  currentHighlightDecoration = null;
                 }
               }
 
@@ -1192,30 +1236,86 @@ async function insertAfterPattern(
     throw new Error(`Pattern not found: "${action.after}"${action.near ? ` near "${action.near}"` : ''}`);
   }
 
-  const line = document.lineAt(lineResult.line);
-  const endPosition = line.range.end;
+  const matchedLine = document.lineAt(lineResult.line);
+  const matchedLineText = matchedLine.text.trim();
+  const languageId = document.languageId;
+
+  // DETECT IF THIS LINE OPENS A BLOCK
+  let isBlockOpener = false;
+  if (languageId === 'python' || languageId === 'ruby') {
+    isBlockOpener = matchedLineText.endsWith(':');
+  } else if (['javascript', 'typescript', 'go', 'cpp', 'csharp', 'java', 'c'].includes(languageId)) {
+    isBlockOpener = matchedLineText.endsWith('{');
+  }
+
+  let insertAfterLine = lineResult.line;
+
+  if (isBlockOpener) {
+    // FIND THE END OF THE BLOCK
+    const matchedIndent = detectIndentation(matchedLine.text, options);
+    const matchedIndentLevel = matchedIndent.count;
+
+    if (languageId === 'python' || languageId === 'ruby') {
+      // Python: find the first line with SAME or LESS indentation (block ended)
+      for (let i = lineResult.line + 1; i < document.lineCount; i++) {
+        const currentLine = document.lineAt(i);
+        const currentText = currentLine.text;
+
+        if (currentText.trim().length === 0) continue;
+
+        const currentIndent = detectIndentation(currentText, options);
+
+        if (currentIndent.count <= matchedIndentLevel) {
+          insertAfterLine = i - 1;
+          break;
+        }
+
+        if (i === document.lineCount - 1) {
+          insertAfterLine = i;
+        }
+      }
+    } else {
+      // Brace languages: find matching closing brace
+      let braceCount = 0;
+      let foundOpening = false;
+
+      for (let i = lineResult.line; i < document.lineCount; i++) {
+        const currentText = document.lineAt(i).text;
+
+        for (const char of currentText) {
+          if (char === '{') { braceCount++; foundOpening = true; }
+          else if (char === '}') {
+            braceCount--;
+            if (foundOpening && braceCount === 0) { insertAfterLine = i; break; }
+          }
+        }
+        if (foundOpening && braceCount === 0) break;
+      }
+    }
+  }
+
+  const targetLine = document.lineAt(insertAfterLine);
+  const endPosition = targetLine.range.end;
 
   editor.selection = new vscode.Selection(endPosition, endPosition);
-  editor.revealRange(
-    new vscode.Range(endPosition, endPosition),
-    vscode.TextEditorRevealType.InCenter
-  );
+  editor.revealRange(new vscode.Range(endPosition, endPosition), vscode.TextEditorRevealType.InCenter);
 
   await delay(300);
 
-  const targetIndent = getTargetIndent(document, lineResult.line);
+  // Use MATCHED line's indentation (sibling level)
+  const targetIndent = detectIndentation(matchedLine.text, options).total;
   const normalizedContent = normalizeIndentation(action.content!, targetIndent, options);
 
+  // Insert newline FIRST
   await editor.edit(editBuilder => {
     editBuilder.insert(endPosition, '\n');
   });
 
-  await delay(100);
-
   const newLineNum = endPosition.line + 1;
-  const newLine = editor.document.lineAt(newLineNum);
-  const newLinePosition = newLine.range.start;
+  const newLinePosition = new vscode.Position(newLineNum, 0);
   editor.selection = new vscode.Selection(newLinePosition, newLinePosition);
+
+  await delay(100);
 
   await typeText(editor, normalizedContent, typingSpeed);
 }
@@ -1243,21 +1343,36 @@ async function insertBeforePattern(
   const targetIndent = detectIndentation(line.text, options).total;
   const normalizedContent = normalizeIndentation(action.content!, targetIndent, options);
 
-  editor.selection = new vscode.Selection(startPosition, startPosition);
+  // NEW LOGIC: Insert newline FIRST (splitting the current line), then type in the GAP
+  // But for "Insert Before", we want:
+  // Old:
+  // LINE N: content
+  // New:
+  // LINE N: <typed content>
+  // LINE N+1: content
+
+  // Implementation:
+  // 1. Insert \n at start of line. (Pushes existing content down)
+  await editor.edit(editBuilder => {
+    editBuilder.insert(startPosition, '\n');
+  });
+
+  // 2. Move cursor UP to the newly created blank line (now at lineResult.line)
+  // The previous insertion moved the original content to line+1
+  const blankLinePos = new vscode.Position(lineResult.line, 0);
+  editor.selection = new vscode.Selection(blankLinePos, blankLinePos);
+
   editor.revealRange(
-    new vscode.Range(startPosition, startPosition),
+    new vscode.Range(blankLinePos, blankLinePos),
     vscode.TextEditorRevealType.InCenter
   );
 
   await delay(300);
 
+  // 3. Type the content
   await typeText(editor, normalizedContent, typingSpeed);
 
-  await editor.edit(editBuilder => {
-    editBuilder.insert(editor.selection.active, '\n');
-  });
-
-  await delay(100);
+  // 4. No need to insert another newline, we already split it.
 }
 
 /**
@@ -1277,21 +1392,25 @@ async function insertAtLine(
   const targetIndent = detectIndentation(line.text, options).total;
   const normalizedContent = normalizeIndentation(action.content!, targetIndent, options);
 
-  editor.selection = new vscode.Selection(position, position);
+  // NEW LOGIC: Similar to Insert Before
+  // 1. Split line first (create space)
+  await editor.edit(editBuilder => {
+    editBuilder.insert(position, '\n');
+  });
+
+  // 2. Move cursor to the new line
+  const startPos = new vscode.Position(lineNumber, 0);
+  editor.selection = new vscode.Selection(startPos, startPos);
+
   editor.revealRange(
-    new vscode.Range(position, position),
+    new vscode.Range(startPos, startPos),
     vscode.TextEditorRevealType.InCenter
   );
 
   await delay(300);
 
+  // 3. Type content
   await typeText(editor, normalizedContent, typingSpeed);
-
-  await editor.edit(editBuilder => {
-    editBuilder.insert(editor.selection.active, '\n');
-  });
-
-  await delay(100);
 }
 
 /**

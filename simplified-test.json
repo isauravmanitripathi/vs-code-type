@@ -1,0 +1,53 @@
+{
+    "rootFolder": "saurav-demo",
+    "globalTypingSpeed": 35,
+    "enableVoiceover": true,
+    "actions": [
+        {
+            "type": "createFolder",
+            "path": "src",
+            "voiceover": "Creating the source directory."
+        },
+        {
+            "type": "createFile",
+            "path": "src/logger.js",
+            "voiceover": "Let's start with a simple logger module."
+        },
+        {
+            "type": "openFile",
+            "path": "src/logger.js"
+        },
+        {
+            "type": "writeText",
+            "content": "class Logger {\n    static log(msg) {\n        console.log(`[LOG]: ${msg}`);\n    }\n}\n\nmodule.exports = Logger;",
+            "voiceover": "We will create a basic Logger class.",
+            "highlight": true
+        },
+        {
+            "type": "insert",
+            "after": "static log(msg) {",
+            "content": "if (!msg) return;",
+            "voiceover": "Let's add a quick validation check. Notice how it pushes the line down automatically.",
+            "highlight": true
+        },
+        {
+            "type": "createFile",
+            "path": "src/app.js",
+            "voiceover": "Now let's create the main app file."
+        },
+        {
+            "type": "writeText",
+            "path": "src/app.js",
+            "content": "const Logger = require('./logger');\n\nLogger.log('Application started');",
+            "voiceover": "And use our new Logger.",
+            "highlight": true
+        },
+        {
+            "type": "insert",
+            "at": 0,
+            "content": "// Main Application Entry Point",
+            "voiceover": "I forgot to add a comment at the top. Let's insert it at line zero.",
+            "highlight": true
+        }
+    ]
+}
