@@ -10,27 +10,27 @@ interface Action {
   action?: 'createFolder' | 'createFile' | 'openFile' | 'writeText' | 'insert' | 'delete' | 'replace' | 'highlight';
   path?: string;
   content?: string;
-  
+
   // Location selectors
   after?: string;
   before?: string;
   at?: number;
   find?: string;
-  
+
   // Context for disambiguation
   near?: string;
   inside?: string;
   occurrence?: number;
-  
+
   // Replace
   with?: string;
-  
+
   // Options
   typingSpeed?: number;
   voiceover?: string;
   voice?: string;
   voiceoverTiming?: 'before' | 'after' | 'during';
-  
+
   // Highlight cursor control
   moveCursor?: 'newLineAfter' | 'newLineBefore' | 'sameLine' | 'endOfFile' | 'stay' | 'nextBlankLine';
 }
@@ -63,14 +63,14 @@ let timerInterval: NodeJS.Timeout | null = null;
 function removePythonDocstrings(content: string): string {
   // Remove triple double quotes docstrings
   let cleaned = content.replace(/"""\s*[\s\S]*?\s*"""/g, '');
-  
+
   // Remove triple single quotes docstrings
   cleaned = cleaned.replace(/'''\s*[\s\S]*?\s*'''/g, '');
-  
+
   // Clean up any extra blank lines that might result from removal
   // But preserve intentional spacing (max 2 consecutive newlines)
   cleaned = cleaned.replace(/\n{3,}/g, '\n\n');
-  
+
   return cleaned;
 }
 
@@ -80,22 +80,22 @@ function removePythonDocstrings(content: string): string {
  */
 function normalizeAction(action: Action): Action {
   const normalized = { ...action };
-  
+
   // If 'action' is provided but not 'type', copy it over
   if (action.action && !action.type) {
     normalized.type = action.action;
   }
-  
+
   // If neither is provided, throw error
   if (!normalized.type) {
     throw new Error('Action must have either "type" or "action" property');
   }
-  
+
   // Clean docstrings from content if present
   if (normalized.content) {
     normalized.content = removePythonDocstrings(normalized.content);
   }
-  
+
   return normalized;
 }
 
@@ -104,7 +104,7 @@ function normalizeAction(action: Action): Action {
  */
 function extractVoiceovers(actions: Action[], defaultVoice: string): Array<{ text: string; voice: string }> {
   const voiceovers: Array<{ text: string; voice: string }> = [];
-  
+
   for (const action of actions) {
     if (action.voiceover) {
       voiceovers.push({
@@ -113,7 +113,7 @@ function extractVoiceovers(actions: Action[], defaultVoice: string): Array<{ tex
       });
     }
   }
-  
+
   return voiceovers;
 }
 
@@ -122,14 +122,14 @@ function extractVoiceovers(actions: Action[], defaultVoice: string): Array<{ tex
  */
 async function monitorAudioGeneration(statusBar: vscode.StatusBarItem): Promise<void> {
   const cacheManager = audioHandler.getCacheManager();
-  
+
   while (!cacheManager.isAllReady()) {
     const status = cacheManager.getProgress();
     const timerPrefix = timestampTracker.getElapsedFormatted();
     statusBar.text = `${timerPrefix} $(sync~spin) Generating audio (${status.ready}/${status.total})...`;
     await delay(500);
   }
-  
+
   const finalStatus = cacheManager.getProgress();
   if (finalStatus.failed > 0) {
     const timerPrefix = timestampTracker.getElapsedFormatted();
@@ -146,7 +146,7 @@ function startTimer(statusBar: vscode.StatusBarItem, getCurrentMessage: () => st
   if (timerInterval) {
     clearInterval(timerInterval);
   }
-  
+
   // Update every second
   timerInterval = setInterval(() => {
     const timerPrefix = timestampTracker.getElapsedFormatted();
@@ -208,7 +208,7 @@ export function activate(context: vscode.ExtensionContext) {
 
     const selectedPath = fileUri[0].fsPath;
     const stats = fs.statSync(selectedPath);
-    
+
     let blueprintFiles: string[] = [];
 
     if (stats.isDirectory()) {
@@ -286,14 +286,14 @@ export function activate(context: vscode.ExtensionContext) {
       for (let fileIndex = 0; fileIndex < blueprintFiles.length; fileIndex++) {
         const jsonPath = blueprintFiles[fileIndex];
         const fileName = path.basename(jsonPath);
-        
+
         currentStatusMessage = `$(file-code) Loading ${fileName}...`;
-        
+
         // RECORD START OF THIS BLUEPRINT (always)
         if (blueprintFiles.length > 1) {
           timestampTracker.recordBlueprintStart(fileName);
         }
-        
+
         let blueprint: Blueprint;
 
         try {
@@ -303,12 +303,12 @@ export function activate(context: vscode.ExtensionContext) {
           currentStatusMessage = `$(error) Failed to parse ${fileName}`;
           await delay(3000);
           results.push({ file: fileName, success: false, error: `Parse error: ${error}` });
-          
+
           // RECORD END EVEN ON ERROR (always)
           if (blueprintFiles.length > 1) {
             timestampTracker.recordBlueprintEnd();
           }
-          
+
           continue; // Skip this file and continue with next
         }
 
@@ -317,12 +317,12 @@ export function activate(context: vscode.ExtensionContext) {
           currentStatusMessage = `$(error) ${fileName}: Missing rootFolder`;
           await delay(3000);
           results.push({ file: fileName, success: false, error: 'Missing rootFolder property' });
-          
+
           // RECORD END EVEN ON ERROR (always)
           if (blueprintFiles.length > 1) {
             timestampTracker.recordBlueprintEnd();
           }
-          
+
           continue;
         }
 
@@ -330,12 +330,12 @@ export function activate(context: vscode.ExtensionContext) {
           currentStatusMessage = `$(error) ${fileName}: Invalid actions array`;
           await delay(3000);
           results.push({ file: fileName, success: false, error: 'Missing or invalid actions array' });
-          
+
           // RECORD END EVEN ON ERROR (always)
           if (blueprintFiles.length > 1) {
             timestampTracker.recordBlueprintEnd();
           }
-          
+
           continue;
         }
 
@@ -352,12 +352,12 @@ export function activate(context: vscode.ExtensionContext) {
           currentStatusMessage = `$(error) ${fileName}: ${error}`;
           await delay(3000);
           results.push({ file: fileName, success: false, error: `${error}` });
-          
+
           // RECORD END EVEN ON ERROR (always)
           if (blueprintFiles.length > 1) {
             timestampTracker.recordBlueprintEnd();
           }
-          
+
           continue;
         }
 
@@ -374,29 +374,29 @@ export function activate(context: vscode.ExtensionContext) {
 
         // START PARALLEL AUDIO GENERATION IN BACKGROUND (NON-BLOCKING)
         let audioGenerationMonitor: Promise<void> | null = null;
-        
+
         if (enableVoiceover) {
           const voiceovers = extractVoiceovers(blueprint.actions, defaultVoice);
-          
+
           if (voiceovers.length > 0) {
             currentStatusMessage = `$(sync~spin) Starting audio generation (${voiceovers.length} files)...`;
-            
+
             const cacheManager = audioHandler.getCacheManager();
-            
+
             // Start generation in background (non-blocking)
             cacheManager.pregenerateAll(voiceovers).catch(err => {
               console.error('Background audio generation error:', err);
             });
-            
+
             // Start monitoring in background
             audioGenerationMonitor = monitorAudioGeneration(globalStatusBar);
-            
+
             // Small delay to show the status
             await delay(1000);
           }
         }
 
-        const blueprintTitle = blueprintFiles.length > 1 
+        const blueprintTitle = blueprintFiles.length > 1
           ? `[${fileIndex + 1}/${blueprintFiles.length}] ${fileName}`
           : fileName;
 
@@ -411,23 +411,40 @@ export function activate(context: vscode.ExtensionContext) {
             const action = blueprint.actions[i];
             const nextAction = i + 1 < blueprint.actions.length ? blueprint.actions[i + 1] : null;
             const actionName = getActionDescription(action);
-            
+
             // Update current status message for timer
             currentStatusMessage = `$(rocket) [${i + 1}/${totalActions}] ${actionName}`;
+
+            // DETAILED CONSOLE LOGGING
+            console.log(`\n${'='.repeat(60)}`);
+            console.log(`📍 ACTION ${i + 1}/${totalActions}: ${action.type?.toUpperCase()}`);
+            console.log(`${'='.repeat(60)}`);
+            console.log(`📄 File: ${fileName}`);
+            console.log(`🎯 Action Details:`, JSON.stringify(action, null, 2));
+            console.log(`⏱️  Status: ${currentStatusMessage}`);
+            console.log(`${'='.repeat(60)}\n`);
 
             try {
               // Special handling for highlight actions with voiceover
               if (action.type === 'highlight') {
+                console.log(`🔦 Executing HIGHLIGHT action...`);
+                console.log(`   - Target file: ${action.path}`);
+                console.log(`   - Pattern to find: "${action.find}"`);
+                if (action.near) console.log(`   - Context (near): "${action.near}"`);
+                if (action.voiceover) console.log(`   - Has voiceover: Yes`);
+
                 await handleHighlightWithVoiceover(action, baseDir, enableVoiceover, defaultVoice, currentStatusMessage, (msg) => { currentStatusMessage = msg; });
-                
+
                 // Handle cursor positioning after highlight
                 await handlePostHighlight(action, nextAction);
+                console.log(`✅ HIGHLIGHT completed successfully\n`);
               } else {
                 // Normal action handling
                 const voiceoverTiming = action.voiceover ? (action.voiceoverTiming || 'before') : null;
                 const voiceToUse = action.voice || defaultVoice;
 
                 if (enableVoiceover && voiceoverTiming === 'before') {
+                  console.log(`🎤 Playing voiceover BEFORE action...`);
                   currentStatusMessage = `$(unmute) Playing voiceover...`;
                   await audioHandler.playVoiceover(action.voiceover!, voiceToUse, 'before');
                   // Restore action status after audio
@@ -436,28 +453,89 @@ export function activate(context: vscode.ExtensionContext) {
 
                 let duringAudioPromise: Promise<void> | null = null;
                 if (enableVoiceover && voiceoverTiming === 'during') {
+                  console.log(`🎤 Starting voiceover DURING action...`);
                   currentStatusMessage = `$(unmute) ${actionName} + audio`;
                   duringAudioPromise = audioHandler.playVoiceover(action.voiceover!, voiceToUse, 'during');
                   await delay(100);
                 }
 
+                console.log(`⚙️  Executing ${action.type} action...`);
                 await executeAction(action, baseDir, globalTypingSpeed, currentStatusMessage, (msg) => { currentStatusMessage = msg; });
+                console.log(`✅ ${action.type} completed successfully`);
 
                 if (enableVoiceover && voiceoverTiming === 'after') {
+                  console.log(`🎤 Playing voiceover AFTER action...`);
                   currentStatusMessage = `$(unmute) Playing voiceover...`;
                   await audioHandler.playVoiceover(action.voiceover!, voiceToUse, 'after');
                 }
 
                 if (duringAudioPromise) {
                   await duringAudioPromise;
+                  console.log(`🎤 Voiceover completed`);
                 }
               }
-              
+
               await delay(actionDelay);
             } catch (error) {
+              // ENHANCED ERROR HANDLING
+              const errorMessage = error instanceof Error ? error.message : String(error);
+              const errorStack = error instanceof Error ? error.stack : 'No stack trace available';
+
               // Log the error for this blueprint but don't stop processing
               blueprintSuccess = false;
-              blueprintError = `Error at step ${i + 1}: ${error}`;
+              blueprintError = `Error at step ${i + 1} (${action.type}): ${errorMessage}`;
+
+              // DETAILED CONSOLE ERROR LOGGING
+              console.error(`\n${'❌'.repeat(30)}`);
+              console.error(`💥 CRASH DETECTED AT ACTION ${i + 1}/${totalActions}`);
+              console.error(`${'❌'.repeat(30)}`);
+              console.error(`📄 Blueprint: ${fileName}`);
+              console.error(`🎯 Action Type: ${action.type}`);
+              console.error(`📊 Action Number: ${i + 1} of ${totalActions}`);
+              console.error(`\n🔍 ACTION DETAILS:`);
+              console.error(JSON.stringify(action, null, 2));
+              console.error(`\n❗ ERROR MESSAGE:`);
+              console.error(errorMessage);
+              console.error(`\n📚 FULL STACK TRACE:`);
+              console.error(errorStack);
+              console.error(`\n💡 LIKELY CAUSE:`);
+
+              // Provide helpful error context based on action type
+              if (action.type === 'insert' || action.type === 'highlight' || action.type === 'delete' || action.type === 'replace') {
+                const pattern = action.find || action.after || action.before;
+                console.error(`   Pattern matching failed. Could not find: "${pattern}"`);
+                if (action.near) {
+                  console.error(`   Context filter: "${action.near}"`);
+                }
+                console.error(`   Possible reasons:`);
+                console.error(`   - Pattern doesn't exist in the file yet`);
+                console.error(`   - Typo in the pattern string`);
+                console.error(`   - File content doesn't match expectation`);
+                console.error(`   - Previous action didn't execute correctly`);
+              } else if (action.type === 'openFile') {
+                console.error(`   File not found or couldn't be opened: ${action.path}`);
+                console.error(`   Check if the file was created in a previous step`);
+              } else if (action.type === 'writeText') {
+                console.error(`   No active editor or invalid content`);
+                console.error(`   Make sure openFile was called first`);
+              }
+              console.error(`${'❌'.repeat(30)}\n`);
+
+              // SHOW VS CODE TOAST NOTIFICATION
+              const actionDescription = getActionDescription(action);
+              const notificationMessage = `Blueprint crashed at action ${i + 1}/${totalActions}: ${action.type}\n\nError: ${errorMessage}\n\nCheck Debug Console for full details.`;
+
+              vscode.window.showErrorMessage(
+                `❌ Tutorial Failed: ${actionDescription}`,
+                { modal: false, detail: notificationMessage },
+                'View Details',
+                'Continue'
+              ).then(selection => {
+                if (selection === 'View Details') {
+                  vscode.commands.executeCommand('workbench.action.toggleDevTools');
+                }
+              });
+
               currentStatusMessage = `$(error) ${fileName} failed at step ${i + 1}`;
               await delay(3000);
               break; // Break out of action loop, but continue to next blueprint
@@ -468,7 +546,7 @@ export function activate(context: vscode.ExtensionContext) {
           if (audioGenerationMonitor) {
             await audioGenerationMonitor;
           }
-          
+
           // Cleanup remaining audio files for this blueprint
           audioHandler.getCacheManager().reset();
         }
@@ -506,7 +584,7 @@ export function activate(context: vscode.ExtensionContext) {
       const failCount = results.filter(r => !r.success).length;
 
       const finalTimer = timestampTracker.getElapsedFormatted();
-      
+
       if (failCount === 0) {
         globalStatusBar.text = `${finalTimer} $(check) All ${blueprintFiles.length} blueprint(s) completed!`;
       } else if (successCount === 0) {
@@ -514,14 +592,14 @@ export function activate(context: vscode.ExtensionContext) {
       } else {
         globalStatusBar.text = `${finalTimer} $(warning) ${successCount}/${blueprintFiles.length} blueprints completed`;
       }
-      
+
       await delay(3000);
 
       // SAVE TIMESTAMPS FILE (always)
       timestampTracker.saveTimestamps();
       globalStatusBar.text = `${finalTimer} $(check) Timestamps saved to timestamps.txt`;
       await delay(3000);
-      
+
       globalStatusBar.hide();
     } catch (error) {
       // Handle any unexpected errors
@@ -609,7 +687,7 @@ async function handleHighlightWithVoiceover(
 
   // Find the pattern
   const lineResult = findPattern(document, action.find, action.near, action.inside, action.occurrence);
-  
+
   if (!lineResult) {
     throw new Error(`Pattern not found for highlight: "${action.find}"${action.near ? ` near "${action.near}"` : ''}`);
   }
@@ -646,7 +724,7 @@ async function handleHighlightWithVoiceover(
 
   if (enableVoiceover && action.voiceover) {
     updateMessage(`$(unmute) Playing voiceover...`);
-    
+
     if (voiceoverTiming === 'before') {
       await audioHandler.playVoiceover(action.voiceover, voiceToUse, 'before');
       // Keep highlight for minimum duration after voiceover
@@ -675,7 +753,7 @@ async function handlePostHighlight(currentAction: Action, nextAction: Action | n
   if (!editor) return;
 
   const document = editor.document;
-  
+
   // If user explicitly specified cursor movement, use that
   if (currentAction.moveCursor) {
     await applyCursorMovement(editor, currentAction.moveCursor);
@@ -685,7 +763,7 @@ async function handlePostHighlight(currentAction: Action, nextAction: Action | n
   // Otherwise, use smart detection based on next action
   if (!nextAction) return;
 
-  const needsRepositioning = 
+  const needsRepositioning =
     nextAction.type === 'writeText' ||
     (nextAction.type === 'insert' && !nextAction.after && !nextAction.before && nextAction.at === undefined);
 
@@ -706,11 +784,11 @@ async function applyCursorMovement(editor: vscode.TextEditor, movement: string):
     case 'newLineAfter': {
       const line = document.lineAt(currentLine);
       const endPosition = line.range.end;
-      
+
       await editor.edit(editBuilder => {
         editBuilder.insert(endPosition, '\n');
       });
-      
+
       const newPosition = new vscode.Position(currentLine + 1, 0);
       editor.selection = new vscode.Selection(newPosition, newPosition);
       editor.revealRange(
@@ -723,11 +801,11 @@ async function applyCursorMovement(editor: vscode.TextEditor, movement: string):
     case 'newLineBefore': {
       const line = document.lineAt(currentLine);
       const startPosition = line.range.start;
-      
+
       await editor.edit(editBuilder => {
         editBuilder.insert(startPosition, '\n');
       });
-      
+
       const newPosition = new vscode.Position(currentLine, 0);
       editor.selection = new vscode.Selection(newPosition, newPosition);
       editor.revealRange(
@@ -747,19 +825,19 @@ async function applyCursorMovement(editor: vscode.TextEditor, movement: string):
     case 'endOfFile': {
       const lastLine = document.lineAt(document.lineCount - 1);
       const endPosition = lastLine.range.end;
-      
+
       editor.selection = new vscode.Selection(endPosition, endPosition);
-      
+
       const lastLineText = lastLine.text;
       if (lastLineText.trim().length > 0) {
         await editor.edit(editBuilder => {
           editBuilder.insert(endPosition, '\n');
         });
-        
+
         const newEndPosition = editor.document.lineAt(editor.document.lineCount - 1).range.end;
         editor.selection = new vscode.Selection(newEndPosition, newEndPosition);
       }
-      
+
       editor.revealRange(
         new vscode.Range(editor.selection.active, editor.selection.active),
         vscode.TextEditorRevealType.InCenter
@@ -782,7 +860,7 @@ async function applyCursorMovement(editor: vscode.TextEditor, movement: string):
           break;
         }
       }
-      
+
       if (!foundBlankLine) {
         await applyCursorMovement(editor, 'endOfFile');
       }
@@ -814,10 +892,10 @@ function detectIndentation(lineText: string, options: { insertSpaces: boolean; t
   if (!match) {
     return { char: options.insertSpaces ? ' ' : '\t', count: 0, total: '' };
   }
-  
+
   const whitespace = match[1];
   const hasTab = whitespace.includes('\t');
-  
+
   if (hasTab) {
     const tabCount = (whitespace.match(/\t/g) || []).length;
     return { char: '\t', count: tabCount, total: whitespace };
@@ -844,14 +922,14 @@ function getTargetIndent(document: vscode.TextDocument, targetLine: number): str
 
   const trimmed = line.text.trim();
   const languageId = document.languageId;
-  
+
   let isBlockOpener = false;
   if (languageId === 'python' || languageId === 'ruby') {
     isBlockOpener = trimmed.endsWith(':');
   } else if (['javascript', 'typescript', 'go', 'cpp', 'csharp', 'java'].includes(languageId)) {
     isBlockOpener = trimmed.endsWith('{');
   }
-  
+
   if (isBlockOpener) {
     return currentTotal + indentChar.repeat(levelSize);
   }
@@ -896,15 +974,15 @@ function normalizeIndentation(content: string, targetIndent: string, options: { 
   const indentChar = options.insertSpaces ? ' ' : '\t';
   const levelSize = options.insertSpaces ? options.tabSize : 1;
   const normalizedLines: string[] = [];
-  
+
   for (const line of lines) {
     const prefixMatch = line.match(/^\s*/);
     const prefix = prefixMatch ? prefixMatch[0] : '';
     const relativePrefix = prefix.substring(minPrefix.length);
     const contentPart = line.trimStart();
-    
+
     let normalizedRelative = relativePrefix.replace(/\t/g, indentChar.repeat(levelSize));
-    
+
     normalizedLines.push(targetIndent + normalizedRelative + contentPart);
   }
 
@@ -916,7 +994,7 @@ function normalizeIndentation(content: string, targetIndent: string, options: { 
  */
 async function autoFormatDocument(editor: vscode.TextEditor): Promise<void> {
   if (!editor) return;
-  
+
   try {
     await vscode.commands.executeCommand('editor.action.formatDocument');
     await delay(200);
@@ -935,14 +1013,14 @@ async function typeText(editor: vscode.TextEditor, text: string, speed: number):
 
   for (const char of text) {
     const currentPos = editor.selection.active;
-    
+
     await editor.edit(editBuilder => {
       editBuilder.insert(currentPos, char);
     }, {
       undoStopBefore: false,
       undoStopAfter: false
     });
-    
+
     let newPos: vscode.Position;
     if (char === '\n') {
       newPos = new vscode.Position(currentPos.line + 1, 0);
@@ -950,16 +1028,16 @@ async function typeText(editor: vscode.TextEditor, text: string, speed: number):
       newPos = currentPos.translate(0, 1);
     }
     editor.selection = new vscode.Selection(newPos, newPos);
-    
+
     charCount++;
-    
+
     if (char === '\n' || charCount % scrollInterval === 0) {
       editor.revealRange(editor.selection, vscode.TextEditorRevealType.Default);
       if (char !== '\n') {
         await delay(scrollPause);
       }
     }
-    
+
     await delay(speed);
   }
 
@@ -967,9 +1045,9 @@ async function typeText(editor: vscode.TextEditor, text: string, speed: number):
 }
 
 async function executeAction(
-  action: Action, 
-  baseDir: string, 
-  globalTypingSpeed: number, 
+  action: Action,
+  baseDir: string,
+  globalTypingSpeed: number,
   currentMessage: string,
   updateMessage: (msg: string) => void
 ): Promise<void> {
@@ -978,20 +1056,20 @@ async function executeAction(
   switch (action.type) {
     case 'createFolder':
       if (!action.path) throw new Error('createFolder requires path');
-      
+
       updateMessage(`$(folder) Creating folder: ${action.path}`);
       await vscode.commands.executeCommand('workbench.view.explorer');
       await delay(300);
-      
+
       const folderPath = path.join(baseDir, action.path);
       const parentPath = path.dirname(folderPath);
-      
+
       if (fs.existsSync(parentPath)) {
         const parentUri = vscode.Uri.file(parentPath);
         await vscode.commands.executeCommand('revealInExplorer', parentUri);
         await delay(400);
       }
-      
+
       if (!fs.existsSync(folderPath)) {
         fs.mkdirSync(folderPath, { recursive: true });
         const folderUri = vscode.Uri.file(folderPath);
@@ -1002,14 +1080,14 @@ async function executeAction(
 
     case 'createFile':
       if (!action.path) throw new Error('createFile requires path');
-      
+
       updateMessage(`$(file-add) Creating file: ${action.path}`);
       await vscode.commands.executeCommand('workbench.view.explorer');
       await delay(300);
-      
+
       const filePath = path.join(baseDir, action.path);
       const fileDir = path.dirname(filePath);
-      
+
       if (fs.existsSync(fileDir)) {
         const dirUri = vscode.Uri.file(fileDir);
         await vscode.commands.executeCommand('revealInExplorer', dirUri);
@@ -1017,7 +1095,7 @@ async function executeAction(
       } else {
         fs.mkdirSync(fileDir, { recursive: true });
       }
-      
+
       if (!fs.existsSync(filePath)) {
         fs.writeFileSync(filePath, '');
         const fileUri = vscode.Uri.file(filePath);
@@ -1039,7 +1117,7 @@ async function executeAction(
       if (!action.content) throw new Error('writeText requires content');
       const editor = vscode.window.activeTextEditor;
       if (!editor) throw new Error('No active editor');
-      
+
       updateMessage(`$(edit) Writing text...`);
       await typeText(editor, action.content, typingSpeed);
       break;
@@ -1107,38 +1185,38 @@ async function insertAfterPattern(
   options: { insertSpaces: boolean; tabSize: number }
 ): Promise<void> {
   const document = editor.document;
-  
+
   const lineResult = findPattern(document, action.after!, action.near, action.inside, action.occurrence);
-  
+
   if (!lineResult) {
     throw new Error(`Pattern not found: "${action.after}"${action.near ? ` near "${action.near}"` : ''}`);
   }
 
   const line = document.lineAt(lineResult.line);
   const endPosition = line.range.end;
-  
+
   editor.selection = new vscode.Selection(endPosition, endPosition);
   editor.revealRange(
     new vscode.Range(endPosition, endPosition),
     vscode.TextEditorRevealType.InCenter
   );
-  
+
   await delay(300);
 
   const targetIndent = getTargetIndent(document, lineResult.line);
   const normalizedContent = normalizeIndentation(action.content!, targetIndent, options);
-  
+
   await editor.edit(editBuilder => {
     editBuilder.insert(endPosition, '\n');
   });
-  
+
   await delay(100);
-  
+
   const newLineNum = endPosition.line + 1;
   const newLine = editor.document.lineAt(newLineNum);
   const newLinePosition = newLine.range.start;
   editor.selection = new vscode.Selection(newLinePosition, newLinePosition);
-  
+
   await typeText(editor, normalizedContent, typingSpeed);
 }
 
@@ -1152,33 +1230,33 @@ async function insertBeforePattern(
   options: { insertSpaces: boolean; tabSize: number }
 ): Promise<void> {
   const document = editor.document;
-  
+
   const lineResult = findPattern(document, action.before!, action.near, action.inside, action.occurrence);
-  
+
   if (!lineResult) {
     throw new Error(`Pattern not found: "${action.before}"${action.near ? ` near "${action.near}"` : ''}`);
   }
 
   const line = document.lineAt(lineResult.line);
   const startPosition = line.range.start;
-  
+
   const targetIndent = detectIndentation(line.text, options).total;
   const normalizedContent = normalizeIndentation(action.content!, targetIndent, options);
-  
+
   editor.selection = new vscode.Selection(startPosition, startPosition);
   editor.revealRange(
     new vscode.Range(startPosition, startPosition),
     vscode.TextEditorRevealType.InCenter
   );
-  
+
   await delay(300);
 
   await typeText(editor, normalizedContent, typingSpeed);
-  
+
   await editor.edit(editBuilder => {
     editBuilder.insert(editor.selection.active, '\n');
   });
-  
+
   await delay(100);
 }
 
@@ -1194,25 +1272,25 @@ async function insertAtLine(
   const document = editor.document;
   const lineNumber = Math.max(0, Math.min(action.at!, document.lineCount - 1));
   const line = document.lineAt(lineNumber);
-  
+
   const position = line.range.start;
   const targetIndent = detectIndentation(line.text, options).total;
   const normalizedContent = normalizeIndentation(action.content!, targetIndent, options);
-  
+
   editor.selection = new vscode.Selection(position, position);
   editor.revealRange(
     new vscode.Range(position, position),
     vscode.TextEditorRevealType.InCenter
   );
-  
+
   await delay(300);
 
   await typeText(editor, normalizedContent, typingSpeed);
-  
+
   await editor.edit(editBuilder => {
     editBuilder.insert(editor.selection.active, '\n');
   });
-  
+
   await delay(100);
 }
 
@@ -1227,12 +1305,12 @@ async function handleDelete(action: Action): Promise<void> {
 
   const document = editor.document;
   const text = document.getText();
-  
+
   const pattern = action.find.trim();
   const lines = text.split('\n');
   let foundIndex = -1;
   let foundLine = -1;
-  
+
   for (let i = 0; i < lines.length; i++) {
     const trimmedLine = lines[i].trim();
     if (trimmedLine.includes(pattern)) {
@@ -1242,7 +1320,7 @@ async function handleDelete(action: Action): Promise<void> {
       break;
     }
   }
-  
+
   if (foundIndex === -1) {
     throw new Error(`Text not found: "${action.find}"`);
   }
@@ -1250,13 +1328,13 @@ async function handleDelete(action: Action): Promise<void> {
   const actualLine = lines[foundLine];
   const patternIndex = actualLine.indexOf(pattern);
   const absoluteIndex = foundIndex + patternIndex;
-  
+
   const startPos = document.positionAt(absoluteIndex);
   const endPos = document.positionAt(absoluteIndex + pattern.length);
-  
+
   editor.selection = new vscode.Selection(startPos, endPos);
   editor.revealRange(new vscode.Range(startPos, endPos));
-  
+
   await delay(500);
 
   await editor.edit(editBuilder => {
@@ -1277,12 +1355,12 @@ async function handleReplace(action: Action, typingSpeed: number): Promise<void>
 
   const document = editor.document;
   const text = document.getText();
-  
+
   const pattern = action.find.trim();
   const lines = text.split('\n');
   let foundIndex = -1;
   let foundLine = -1;
-  
+
   for (let i = 0; i < lines.length; i++) {
     const trimmedLine = lines[i].trim();
     if (trimmedLine.includes(pattern)) {
@@ -1292,7 +1370,7 @@ async function handleReplace(action: Action, typingSpeed: number): Promise<void>
       break;
     }
   }
-  
+
   if (foundIndex === -1) {
     throw new Error(`Text not found: "${action.find}"`);
   }
@@ -1300,21 +1378,21 @@ async function handleReplace(action: Action, typingSpeed: number): Promise<void>
   const actualLine = lines[foundLine];
   const patternIndex = actualLine.indexOf(pattern);
   const absoluteIndex = foundIndex + patternIndex;
-  
+
   const startPos = document.positionAt(absoluteIndex);
   const endPos = document.positionAt(absoluteIndex + pattern.length);
-  
+
   editor.selection = new vscode.Selection(startPos, endPos);
   editor.revealRange(new vscode.Range(startPos, endPos));
-  
+
   await delay(800);
 
   await editor.edit(editBuilder => {
     editBuilder.delete(new vscode.Range(startPos, endPos));
   });
-  
+
   await delay(200);
-  
+
   await typeText(editor, action.with, typingSpeed);
 }
 
@@ -1328,18 +1406,18 @@ function findPattern(
   inside?: string,
   occurrence?: number
 ): { line: number; character: number } | null {
-  
+
   const text = document.getText();
   const lines = text.split('\n');
-  
+
   const trimmedPattern = pattern.trim();
-  
+
   const matches: { line: number; character: number }[] = [];
-  
+
   for (let lineNum = 0; lineNum < lines.length; lineNum++) {
     const lineText = lines[lineNum];
     const trimmedLine = lineText.trim();
-    
+
     if (trimmedLine.includes(trimmedPattern)) {
       const index = lineText.indexOf(trimmedPattern);
       if (index !== -1) {
@@ -1363,7 +1441,7 @@ function findPattern(
     filteredMatches = matches.filter(match => {
       const startLine = Math.max(0, match.line - 20);
       const endLine = Math.min(lines.length - 1, match.line + 20);
-      
+
       for (let i = startLine; i <= endLine; i++) {
         if (lines[i].trim().includes(contextPattern)) {
           return true;
@@ -1383,18 +1461,18 @@ function findPattern(
 
 export function deactivate() {
   console.log('JSON Project Builder deactivating...');
-  
+
   stopTimer();
-  
+
   if (audioHandler) {
     audioHandler.cleanup();
   }
-  
+
   if (currentHighlightDecoration) {
     currentHighlightDecoration.dispose();
     currentHighlightDecoration = null;
   }
-  
+
   if (globalStatusBar) {
     globalStatusBar.dispose();
   }

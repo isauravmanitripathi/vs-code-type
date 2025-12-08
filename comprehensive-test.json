@@ -1,0 +1,300 @@
+{
+    "rootFolder": "task-manager-demo",
+    "globalTypingSpeed": 30,
+    "actionDelay": 1000,
+    "defaultVoice": "en-US-BrianNeural",
+    "enableVoiceover": true,
+    "actions": [
+        {
+            "type": "createFolder",
+            "path": "src",
+            "voiceover": "Let's start by creating our source directory for all our code files.",
+            "voiceoverTiming": "before"
+        },
+        {
+            "type": "createFolder",
+            "path": "src/models",
+            "voiceover": "We'll need a models folder to store our data structures.",
+            "voiceoverTiming": "before"
+        },
+        {
+            "type": "createFolder",
+            "path": "src/utils",
+            "voiceover": "And a utils folder for helper functions.",
+            "voiceoverTiming": "before"
+        },
+        {
+            "type": "createFile",
+            "path": "src/models/Task.js",
+            "voiceover": "Creating our Task model file which will define the structure of a task.",
+            "voiceoverTiming": "before"
+        },
+        {
+            "type": "openFile",
+            "path": "src/models/Task.js",
+            "voiceover": "Opening the Task model file to start coding.",
+            "voiceoverTiming": "after"
+        },
+        {
+            "type": "writeText",
+            "content": "class Task {\n    constructor(id, title, completed = false) {\n        this.id = id;\n        this.title = title;\n        this.completed = completed;\n        this.createdAt = new Date();\n    }\n}\n\nexport default Task;\n",
+            "voiceover": "We define a Task class with an ID, title, completion status, and timestamp. Notice how the code is typed character by character.",
+            "voiceoverTiming": "during",
+            "typingSpeed": 25
+        },
+        {
+            "type": "highlight",
+            "path": "src/models/Task.js",
+            "find": "this.createdAt = new Date();",
+            "voiceover": "This line automatically records when each task was created using JavaScript's Date object.",
+            "voiceoverTiming": "during",
+            "moveCursor": "endOfFile"
+        },
+        {
+            "type": "insert",
+            "after": "class Task {",
+            "content": "\n    // Static method to create a task from JSON\n    static fromJSON(json) {\n        return new Task(json.id, json.title, json.completed);\n    }\n",
+            "voiceover": "Let's add a static factory method to create tasks from JSON data. This demonstrates the insert after pattern feature.",
+            "voiceoverTiming": "before",
+            "typingSpeed": 20
+        },
+        {
+            "type": "insert",
+            "before": "export default Task;",
+            "content": "\n    // Instance method to toggle completion status\n    toggle() {\n        this.completed = !this.completed;\n        return this;\n    }\n\n    // Convert task to JSON\n    toJSON() {\n        return {\n            id: this.id,\n            title: this.title,\n            completed: this.completed,\n            createdAt: this.createdAt\n        };\n    }\n\n",
+            "voiceover": "Now we insert methods before the export statement. This shows how to use the before pattern for precise placement.",
+            "voiceoverTiming": "before"
+        },
+        {
+            "type": "highlight",
+            "path": "src/models/Task.js",
+            "find": "toggle()",
+            "voiceover": "The toggle method flips the completed status between true and false, making it easy to mark tasks as done or undone.",
+            "voiceoverTiming": "during",
+            "moveCursor": "stay"
+        },
+        {
+            "type": "createFile",
+            "path": "src/utils/storage.js",
+            "voiceover": "Next, we create a storage utility to handle saving and loading tasks."
+        },
+        {
+            "type": "openFile",
+            "path": "src/utils/storage.js"
+        },
+        {
+            "type": "writeText",
+            "content": "// Local storage helper for task persistence\n\nconst STORAGE_KEY = 'tasks';\n\nfunction saveTasks(tasks) {\n    localStorage.setItem(STORAGE_KEY, JSON.stringify(tasks));\n}\n\nfunction loadTasks() {\n    const data = localStorage.getItem(STORAGE_KEY);\n    return data ? JSON.parse(data) : [];\n}\n\nexport { saveTasks, loadTasks };\n",
+            "voiceover": "Writing our storage utilities that use the browser's local storage API to persist tasks.",
+            "voiceoverTiming": "during"
+        },
+        {
+            "type": "insert",
+            "at": 0,
+            "content": "/**\n * Storage Module\n * Handles persistence of tasks using browser localStorage\n */\n\n",
+            "voiceover": "Let's add a documentation header at the top of the file. This demonstrates inserting at a specific line number.",
+            "voiceoverTiming": "before"
+        },
+        {
+            "type": "highlight",
+            "path": "src/utils/storage.js",
+            "find": "localStorage.setItem",
+            "voiceover": "Here we use local storage set item to save our tasks as a JSON string.",
+            "voiceoverTiming": "during",
+            "moveCursor": "nextBlankLine"
+        },
+        {
+            "type": "createFile",
+            "path": "src/TaskManager.js",
+            "voiceover": "Creating the main TaskManager class that will orchestrate everything."
+        },
+        {
+            "type": "openFile",
+            "path": "src/TaskManager.js"
+        },
+        {
+            "type": "writeText",
+            "content": "import Task from './models/Task.js';\nimport { saveTasks, loadTasks } from './utils/storage.js';\n\nclass TaskManager {\n    constructor() {\n        this.tasks = [];\n        this.nextId = 1;\n    }\n}\n\nexport default TaskManager;\n",
+            "voiceover": "Setting up the TaskManager class with imports and basic constructor.",
+            "voiceoverTiming": "during"
+        },
+        {
+            "type": "insert",
+            "after": "this.nextId = 1;",
+            "content": "\n        this.loadFromStorage();\n",
+            "voiceover": "Adding a call to load tasks from storage when the manager is initialized.",
+            "voiceoverTiming": "before"
+        },
+        {
+            "type": "insert",
+            "before": "export default TaskManager;",
+            "content": "\n    // Load tasks from local storage\n    loadFromStorage() {\n        const savedTasks = loadTasks();\n        this.tasks = savedTasks.map(data => Task.fromJSON(data));\n        if (this.tasks.length > 0) {\n            this.nextId = Math.max(...this.tasks.map(t => t.id)) + 1;\n        }\n    }\n\n    // Save tasks to local storage\n    saveToStorage() {\n        const taskData = this.tasks.map(task => task.toJSON());\n        saveTasks(taskData);\n    }\n\n    // Add a new task\n    addTask(title) {\n        const task = new Task(this.nextId++, title);\n        this.tasks.push(task);\n        this.saveToStorage();\n        return task;\n    }\n\n    // Remove a task by ID\n    removeTask(id) {\n        this.tasks = this.tasks.filter(task => task.id !== id);\n        this.saveToStorage();\n    }\n\n    // Toggle task completion\n    toggleTask(id) {\n        const task = this.tasks.find(t => t.id === id);\n        if (task) {\n            task.toggle();\n            this.saveToStorage();\n        }\n    }\n\n    // Get all tasks\n    getAllTasks() {\n        return this.tasks;\n    }\n\n    // Get completed tasks\n    getCompletedTasks() {\n        return this.tasks.filter(task => task.completed);\n    }\n\n    // Get pending tasks\n    getPendingTasks() {\n        return this.tasks.filter(task => !task.completed);\n    }\n\n",
+            "voiceover": "Now we add all the core methods for managing tasks including add, remove, toggle, and various query methods.",
+            "voiceoverTiming": "before",
+            "typingSpeed": 20
+        },
+        {
+            "type": "highlight",
+            "path": "src/TaskManager.js",
+            "find": "addTask(title)",
+            "near": "Add a new task",
+            "voiceover": "The add task method creates a new task, increments the ID counter, and saves to storage.",
+            "voiceoverTiming": "during",
+            "moveCursor": "endOfFile"
+        },
+        {
+            "type": "highlight",
+            "path": "src/TaskManager.js",
+            "find": "Math.max(...this.tasks.map(t => t.id)) + 1",
+            "near": "loadFromStorage",
+            "voiceover": "This clever line finds the highest existing task ID to ensure new tasks don't have conflicting IDs.",
+            "voiceoverTiming": "during",
+            "moveCursor": "endOfFile"
+        },
+        {
+            "type": "createFile",
+            "path": "src/app.js",
+            "voiceover": "Finally, let's create the main application entry point."
+        },
+        {
+            "type": "openFile",
+            "path": "src/app.js"
+        },
+        {
+            "type": "writeText",
+            "content": "import TaskManager from './TaskManager.js';\n\n// Initialize the task manager\nconst manager = new TaskManager();\n\n// Example usage\nconsole.log('Task Manager Demo');\n\n// Add some tasks\nconst task1 = manager.addTask('Buy groceries');\nconst task2 = manager.addTask('Write documentation');\nconst task3 = manager.addTask('Review pull requests');\n\nconsole.log('All tasks:', manager.getAllTasks());\n\n// Toggle a task\nmanager.toggleTask(task1.id);\nconsole.log('After toggling task 1:', manager.getCompletedTasks());\n\n// Remove a task\nmanager.removeTask(task2.id);\nconsole.log('After removing task 2:', manager.getAllTasks());\n",
+            "voiceover": "Writing the main application code that demonstrates how to use our TaskManager.",
+            "voiceoverTiming": "during"
+        },
+        {
+            "type": "insert",
+            "after": "console.log('After removing task 2:', manager.getAllTasks());",
+            "content": "\n\n// Display summary\nconst pending = manager.getPendingTasks().length;\nconst completed = manager.getCompletedTasks().length;\nconsole.log(`Summary: ${pending} pending, ${completed} completed`);\n",
+            "voiceover": "Adding a summary section at the end to show task statistics.",
+            "voiceoverTiming": "before"
+        },
+        {
+            "type": "highlight",
+            "path": "src/app.js",
+            "find": "Buy groceries",
+            "voiceover": "Here we create our first task. Notice how the string is passed to the add task method.",
+            "voiceoverTiming": "during",
+            "moveCursor": "sameLine"
+        },
+        {
+            "type": "replace",
+            "find": "console.log('Task Manager Demo');",
+            "with": "console.log('=== Task Manager Demo ===');",
+            "voiceover": "Let's make the header more prominent by adding some visual separators. This demonstrates the replace action.",
+            "voiceoverTiming": "before",
+            "typingSpeed": 35
+        },
+        {
+            "type": "highlight",
+            "path": "src/app.js",
+            "find": "=== Task Manager Demo ===",
+            "voiceover": "Much better! The header now stands out more clearly.",
+            "voiceoverTiming": "during",
+            "moveCursor": "endOfFile"
+        },
+        {
+            "type": "createFile",
+            "path": "README.md",
+            "voiceover": "Let's create a README file to document our project."
+        },
+        {
+            "type": "openFile",
+            "path": "README.md"
+        },
+        {
+            "type": "writeText",
+            "content": "# Task Manager Demo\n\nA simple task management application built with vanilla JavaScript.\n\n## Features\n\n- Create tasks with unique IDs\n- Mark tasks as complete or incomplete\n- Persistent storage using localStorage\n- Filter tasks by status\n\n## Usage\n\n```javascript\nimport TaskManager from './TaskManager.js';\n\nconst manager = new TaskManager();\nmanager.addTask('My first task');\n```\n\n## Project Structure\n\nTODO: Add structure details\n",
+            "voiceover": "Creating comprehensive documentation in markdown format.",
+            "voiceoverTiming": "during",
+            "typingSpeed": 25
+        },
+        {
+            "type": "replace",
+            "find": "TODO: Add structure details",
+            "with": "```\ntask-manager-demo/\n├── src/\n│   ├── models/\n│   │   └── Task.js\n│   ├── utils/\n│   │   └── storage.js\n│   ├── TaskManager.js\n│   └── app.js\n└── README.md\n```",
+            "voiceover": "Replacing the TODO with an actual directory tree structure.",
+            "voiceoverTiming": "before"
+        },
+        {
+            "type": "insert",
+            "after": "## Usage",
+            "content": "\n\n### Adding Tasks\n\nTo add a new task, simply call the addTask method:\n\n```javascript\nconst task = manager.addTask('Task title');\n```\n\n### Toggling Tasks\n\nMark a task as complete or incomplete:\n\n```javascript\nmanager.toggleTask(taskId);\n```\n\n### Removing Tasks\n\nDelete a task permanently:\n\n```javascript\nmanager.removeTask(taskId);\n```\n",
+            "voiceover": "Adding detailed usage examples with code snippets for each major feature.",
+            "voiceoverTiming": "before"
+        },
+        {
+            "type": "highlight",
+            "path": "README.md",
+            "find": "Persistent storage using localStorage",
+            "voiceover": "One of the key features is persistent storage, which means tasks survive page refreshes.",
+            "voiceoverTiming": "during",
+            "moveCursor": "endOfFile"
+        },
+        {
+            "type": "openFile",
+            "path": "src/TaskManager.js",
+            "voiceover": "Let's go back to the TaskManager to add one more feature."
+        },
+        {
+            "type": "insert",
+            "after": " getPendingTasks() {",
+            "content": "\n        return this.tasks.filter(task => !task.completed);\n    }\n\n    // Clear all completed tasks\n    clearCompleted() {\n        this.tasks = this.getPendingTasks();\n        this.saveToStorage();\n        return this.tasks.length;\n    }\n\n    // Get task count\n    getTaskCount() {",
+            "near": "Get pending tasks",
+            "voiceover": "Adding a clear completed method and a task count method. Notice the use of the near parameter to find the right location.",
+            "voiceoverTiming": "before"
+        },
+        {
+            "type": "delete",
+            "find": "return this.tasks.filter(task => !task.completed);",
+            "voiceover": "Now we delete this duplicate line that was accidentally added. This shows the delete action in practice."
+        },
+        {
+            "type": "insert",
+            "after": "getTaskCount() {",
+            "content": "\n        return {\n            total: this.tasks.length,\n            completed: this.getCompletedTasks().length,\n            pending: this.getPendingTasks().length\n        };\n    }\n",
+            "voiceover": "Implementing the task count method which returns a detailed breakdown.",
+            "voiceoverTiming": "before"
+        },
+        {
+            "type": "highlight",
+            "path": "src/TaskManager.js",
+            "find": "clearCompleted()",
+            "voiceover": "The clear completed method removes all finished tasks in one operation, keeping your list clean.",
+            "voiceoverTiming": "during",
+            "moveCursor": "newLineAfter"
+        },
+        {
+            "type": "openFile",
+            "path": "src/app.js",
+            "voiceover": "Let's update our demo app to showcase these new features."
+        },
+        {
+            "type": "insert",
+            "before": "// Display summary",
+            "content": "\n// Test the new features\nconsole.log('Task count:', manager.getTaskCount());\n\n// Clear completed tasks\nconst remaining = manager.clearCompleted();\nconsole.log(`Cleared completed tasks. ${remaining} tasks remaining.`);\n",
+            "voiceover": "Adding code to test our new clear completed and task count methods.",
+            "voiceoverTiming": "before"
+        },
+        {
+            "type": "highlight",
+            "path": "src/app.js",
+            "find": "manager.getTaskCount()",
+            "voiceover": "This method call returns an object with total, completed, and pending counts.",
+            "voiceoverTiming": "during",
+            "moveCursor": "endOfFile"
+        },
+        {
+            "type": "highlight",
+            "path": "src/app.js",
+            "find": "manager.clearCompleted()",
+            "voiceover": "And this clears all the completed tasks from our list.",
+            "voiceoverTiming": "during",
+            "moveCursor": "endOfFile"
+        }
+    ]
+}

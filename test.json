@@ -1,0 +1,77 @@
+{
+  "rootFolder": "algorithm-demo",
+  "globalTypingSpeed": 35,
+  "actionDelay": 800,
+  "defaultVoice": "en-US-BrianNeural",
+  "enableVoiceover": true,
+  "actions": [
+    {
+      "type": "createFolder",
+      "path": "pathfinding",
+      "voiceover": "Let's start by creating a dedicated folder for our pathfinding algorithms."
+    },
+    {
+      "type": "createFile",
+      "path": "pathfinding/astar_logic.py",
+      "voiceover": "Now we'll create the Python file where our A-Star logic will live."
+    },
+    {
+      "type": "writeText",
+      "content": "class AStarSolver:\n    \"\"\"\n    A* (A-Star) Pathfinding Algorithm.\n    \n    This class implements the A* algorithm to find the shortest path\n    between a start node and an end node in a grid.\n    \"\"\"\n    pass",
+      "voiceover": "We begin with the class definition and a multi-line python docstring to explain what this class does.",
+      "voiceoverTiming": "during"
+    },
+    {
+      "type": "insert",
+      "at": 0,
+      "content": "import heapq\n",
+      "voiceover": "This algorithm requires a priority queue, so let's insert the heap-queue import at the very top of the file.",
+      "voiceoverTiming": "before"
+    },
+    {
+      "type": "insert",
+      "after": "import heapq",
+      "content": "\nclass Node:\n    def __init__(self, position, parent=None):\n        self.position = position\n        self.parent = parent\n        self.g = 0  # Distance from start node\n        self.h = 0  # Heuristic distance to end node\n        self.f = 0  # Total cost",
+      "voiceover": "Now, let's insert a helper Node class right after our imports. Notice the single line comments for cost tracking.",
+      "typingSpeed": 20
+    },
+    {
+      "type": "replace",
+      "find": "pass",
+      "with": "def __init__(self):\n        self.open_list = []\n        self.closed_list = set()\n        # TODO: Implement the main search loop later",
+      "voiceover": "We will replace the 'pass' keyword with our class initializer.",
+      "voiceoverTiming": "after"
+    },
+    {
+      "type": "insert",
+      "before": "def __init__(self):",
+      "content": "    def heuristic(self, node_pos, end_pos):\n        # Using Manhattan distance for grid movement\n        return abs(node_pos[0] - end_pos[0]) + abs(node_pos[1] - end_pos[1])\n\n",
+      "voiceover": "Before the initializer, let's insert our heuristic function. This estimates the distance to the goal."
+    },
+    {
+      "type": "delete",
+      "find": "# TODO: Implement the main search loop later",
+      "voiceover": "We are ready to write the code now, so let's delete that temporary TODO comment."
+    },
+    {
+      "type": "insert",
+      "after": "self.closed_list = set()",
+      "content": "\n    def get_neighbors(self, node):\n        # Returns adjacent coordinates (up, down, left, right)\n        (x, y) = node.position\n        return [(x-1, y), (x+1, y), (x, y-1), (x, y+1)]",
+      "voiceover": "Finally, we add the logic to get neighboring nodes."
+    },
+    {
+      "type": "highlight",
+      "path": "pathfinding/astar_logic.py",
+      "find": "Manhattan distance",
+      "voiceover": "Let's review. Here we used Manhattan distance because we are moving on a grid.",
+      "voiceoverTiming": "during"
+    },
+    {
+      "type": "highlight",
+      "path": "pathfinding/astar_logic.py",
+      "find": "import heapq",
+      "voiceover": "And remember, we imported heapq up here to manage our open list efficiently.",
+      "voiceoverTiming": "after"
+    }
+  ]
+}
