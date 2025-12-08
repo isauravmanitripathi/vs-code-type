@@ -160,6 +160,63 @@ Highlights a line and optionally plays voiceover. Does NOT open the file automat
 }
 ```
 
+### 9. `openTerminal`
+Opens or creates a named terminal.
+
+```json
+{
+  "type": "openTerminal",
+  "terminalName": "Build",
+  "cwd": "src"
+}
+```
+
+| Property | Required | Description |
+|----------|----------|-------------|
+| `terminalName` | ❌ | Name of terminal (default: "Build") |
+| `cwd` | ❌ | Working directory (relative to rootFolder) |
+
+### 10. `runCommand`
+Executes a command in the terminal and waits for completion.
+
+```json
+{
+  "type": "runCommand",
+  "terminalName": "Build",
+  "command": "npm install",
+  "waitForCompletion": true,
+  "timeout": 60000
+}
+```
+
+| Property | Required | Description |
+|----------|----------|-------------|
+| `command` | ✅ | Command to execute |
+| `terminalName` | ❌ | Which terminal to use (default: "Build") |
+| `waitForCompletion` | ❌ | Wait for command to finish (default: true) |
+| `timeout` | ❌ | Timeout in ms (default: 120000) |
+
+### 11. `showTerminal`
+Shows/focuses a terminal.
+
+```json
+{ "type": "showTerminal", "terminalName": "Build" }
+```
+
+### 12. `hideTerminal`
+Hides terminal and returns focus to the editor.
+
+```json
+{ "type": "hideTerminal" }
+```
+
+### 13. `closeTerminal`
+Closes and disposes a terminal.
+
+```json
+{ "type": "closeTerminal", "terminalName": "Build" }
+```
+
 ---
 
 ## Smart Insert Logic

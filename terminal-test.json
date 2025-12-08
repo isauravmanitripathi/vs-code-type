@@ -1,0 +1,143 @@
+{
+    "rootFolder": "terminal-test",
+    "globalTypingSpeed": 30,
+    "actionDelay": 1500,
+    "enableVoiceover": true,
+    "defaultVoice": "en-US-GuyNeural",
+    "actions": [
+        {
+            "type": "createFolder",
+            "path": "test-files",
+            "voiceover": "Let's test the terminal integration by running some basic commands."
+        },
+        {
+            "type": "createFile",
+            "path": "test-files/sample.txt"
+        },
+        {
+            "type": "createFile",
+            "path": "test-files/.hidden-file"
+        },
+        {
+            "type": "createFile",
+            "path": "README.md",
+            "voiceover": "Creating a few files so we have something to list."
+        },
+        {
+            "type": "openFile",
+            "path": "README.md"
+        },
+        {
+            "type": "writeText",
+            "content": "# Terminal Test Project\n\nThis project tests the terminal integration.\n\n## Files\n- test-files/sample.txt\n- test-files/.hidden-file (hidden)\n- README.md",
+            "highlight": true,
+            "voiceover": "Writing a simple README to explain our test project."
+        },
+        {
+            "type": "openTerminal",
+            "terminalName": "Shell",
+            "voiceover": "Now let's open a terminal. We'll start with some basic shell commands."
+        },
+        {
+            "type": "runCommand",
+            "terminalName": "Shell",
+            "command": "pwd",
+            "waitForCompletion": true,
+            "timeout": 5000,
+            "voiceover": "First, let's see our current working directory with pwd."
+        },
+        {
+            "type": "runCommand",
+            "terminalName": "Shell",
+            "command": "ls",
+            "waitForCompletion": true,
+            "timeout": 5000,
+            "voiceover": "Now listing the files with ls. Notice we can see our folders and README."
+        },
+        {
+            "type": "runCommand",
+            "terminalName": "Shell",
+            "command": "ls -la",
+            "waitForCompletion": true,
+            "timeout": 5000,
+            "voiceover": "With ls minus la, we see all files including hidden ones, with detailed info."
+        },
+        {
+            "type": "runCommand",
+            "terminalName": "Shell",
+            "command": "ls -la test-files/",
+            "waitForCompletion": true,
+            "timeout": 5000,
+            "voiceover": "Listing the test-files directory. Notice the hidden file starting with a dot."
+        },
+        {
+            "type": "runCommand",
+            "terminalName": "Shell",
+            "command": "echo 'Hello from the terminal!'",
+            "waitForCompletion": true,
+            "timeout": 5000,
+            "voiceover": "The echo command prints text to the terminal."
+        },
+        {
+            "type": "runCommand",
+            "terminalName": "Shell",
+            "command": "cat README.md",
+            "waitForCompletion": true,
+            "timeout": 5000,
+            "voiceover": "Using cat to display the contents of our README file."
+        },
+        {
+            "type": "runCommand",
+            "terminalName": "Shell",
+            "command": "which python3",
+            "waitForCompletion": true,
+            "timeout": 5000,
+            "voiceover": "Checking where Python 3 is installed on this system."
+        },
+        {
+            "type": "runCommand",
+            "terminalName": "Shell",
+            "command": "python3 --version",
+            "waitForCompletion": true,
+            "timeout": 5000,
+            "voiceover": "Displaying the Python version."
+        },
+        {
+            "type": "runCommand",
+            "terminalName": "Shell",
+            "command": "ffmpeg -version 2>/dev/null | head -1 || echo 'ffmpeg not installed'",
+            "waitForCompletion": true,
+            "timeout": 10000,
+            "voiceover": "Checking if ffmpeg is installed. This is useful for media processing."
+        },
+        {
+            "type": "runCommand",
+            "terminalName": "Shell",
+            "command": "node --version 2>/dev/null || echo 'Node.js not installed'",
+            "waitForCompletion": true,
+            "timeout": 5000,
+            "voiceover": "Checking Node.js version."
+        },
+        {
+            "type": "runCommand",
+            "terminalName": "Shell",
+            "command": "git --version",
+            "waitForCompletion": true,
+            "timeout": 5000,
+            "voiceover": "And finally, checking git version."
+        },
+        {
+            "type": "hideTerminal",
+            "voiceover": "Terminal tests complete! All commands executed successfully."
+        },
+        {
+            "type": "openFile",
+            "path": "README.md",
+            "voiceover": "Back to the editor. The terminal integration is working perfectly."
+        },
+        {
+            "type": "closeTerminal",
+            "terminalName": "Shell"
+        }
+    ]
+}

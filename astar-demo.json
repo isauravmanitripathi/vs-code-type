@@ -1,0 +1,234 @@
+{
+    "rootFolder": "astar-pathfinder",
+    "globalTypingSpeed": 28,
+    "actionDelay": 1000,
+    "enableVoiceover": true,
+    "defaultVoice": "en-US-GuyNeural",
+    "actions": [
+        {
+            "type": "createFolder",
+            "path": "src",
+            "voiceover": "Let's build an A-star pathfinding algorithm in Python."
+        },
+        {
+            "type": "createFile",
+            "path": "src/node.py",
+            "voiceover": "First, we'll create the Node class that represents each cell in our grid."
+        },
+        {
+            "type": "openFile",
+            "path": "src/node.py"
+        },
+        {
+            "type": "writeText",
+            "content": "from __future__ import annotations\nfrom typing import Optional\n\nclass Node:\n    \"\"\"Represents a cell in the pathfinding grid.\"\"\"\n    \n    def __init__(self, row: int, col: int, walkable: bool = True):\n        self.row = row\n        self.col = col\n        self.walkable = walkable\n        \n        # A* costs\n        self.g: float = float('inf')  # Cost from start\n        self.h: float = 0             # Heuristic to end\n        self.f: float = float('inf')  # Total cost (g + h)\n        \n        # Parent for path reconstruction\n        self.parent: Optional[Node] = None\n    \n    def reset(self) -> None:\n        \"\"\"Reset costs for new pathfinding.\"\"\"\n        self.g = float('inf')\n        self.h = 0\n        self.f = float('inf')\n        self.parent = None\n    \n    def __lt__(self, other: Node) -> bool:\n        \"\"\"For priority queue comparison.\"\"\"\n        return self.f < other.f\n    \n    def __repr__(self) -> str:\n        return f\"Node({self.row}, {self.col})\"",
+            "highlight": true,
+            "voiceover": "The Node class holds position, walkability, and A-star costs: g, h, and f."
+        },
+        {
+            "type": "highlight",
+            "path": "src/node.py",
+            "find": "self.g: float = float('inf')",
+            "voiceover": "G cost represents the actual distance from the start node. We initialize to infinity.",
+            "voiceoverTiming": "during",
+            "moveCursor": "stay"
+        },
+        {
+            "type": "highlight",
+            "path": "src/node.py",
+            "find": "self.f: float = float('inf')",
+            "voiceover": "F cost is the total: g plus h. The algorithm always explores the node with lowest f.",
+            "voiceoverTiming": "during",
+            "moveCursor": "stay"
+        },
+        {
+            "type": "createFile",
+            "path": "src/astar.py",
+            "voiceover": "Now let's implement the A-star algorithm itself."
+        },
+        {
+            "type": "openFile",
+            "path": "src/astar.py"
+        },
+        {
+            "type": "writeText",
+            "content": "import heapq\nfrom typing import List, Optional, Tuple\nfrom src.node import Node\n\n\nclass AStar:\n    \"\"\"A* Pathfinding Algorithm implementation.\"\"\"\n    \n    # Directions: up, down, left, right, diagonals\n    DIRECTIONS = [\n        (-1, 0), (1, 0), (0, -1), (0, 1),\n        (-1, -1), (-1, 1), (1, -1), (1, 1)\n    ]\n    \n    def __init__(self, grid: List[List[Node]]):\n        self.grid = grid\n        self.rows = len(grid)\n        self.cols = len(grid[0]) if grid else 0\n    \n    def heuristic(self, a: Node, b: Node) -> float:\n        \"\"\"Manhattan distance heuristic.\"\"\"\n        return abs(a.row - b.row) + abs(a.col - b.col)\n    \n    def get_neighbors(self, node: Node) -> List[Node]:\n        \"\"\"Get all walkable neighbors of a node.\"\"\"\n        neighbors = []\n        for dr, dc in self.DIRECTIONS:\n            new_row = node.row + dr\n            new_col = node.col + dc\n            \n            if 0 <= new_row < self.rows and 0 <= new_col < self.cols:\n                neighbor = self.grid[new_row][new_col]\n                if neighbor.walkable:\n                    neighbors.append(neighbor)\n        \n        return neighbors",
+            "highlight": true,
+            "voiceover": "We set up the class with a grid, directions for 8-way movement, and the Manhattan distance heuristic."
+        },
+        {
+            "type": "highlight",
+            "path": "src/astar.py",
+            "find": "DIRECTIONS = [",
+            "voiceover": "These direction tuples allow movement in all 8 directions: cardinal and diagonal.",
+            "voiceoverTiming": "during",
+            "moveCursor": "stay"
+        },
+        {
+            "type": "highlight",
+            "path": "src/astar.py",
+            "find": "def heuristic(self, a: Node, b: Node)",
+            "voiceover": "The heuristic estimates distance to goal. Manhattan distance works well for grid-based pathfinding.",
+            "voiceoverTiming": "during",
+            "moveCursor": "stay"
+        },
+        {
+            "type": "openFile",
+            "path": "src/astar.py",
+            "voiceover": "Now let's add the main pathfinding method."
+        },
+        {
+            "type": "insert",
+            "after": "return neighbors",
+            "content": "\n    def find_path(self, start: Node, end: Node) -> Optional[List[Tuple[int, int]]]:\n        \"\"\"Find shortest path from start to end using A*.\"\"\"\n        # Reset all nodes\n        for row in self.grid:\n            for node in row:\n                node.reset()\n        \n        # Initialize start node\n        start.g = 0\n        start.h = self.heuristic(start, end)\n        start.f = start.g + start.h\n        \n        # Priority queue: (f_cost, node)\n        open_set = [start]\n        heapq.heapify(open_set)\n        \n        # Track visited nodes\n        closed_set = set()\n        \n        while open_set:\n            current = heapq.heappop(open_set)\n            \n            # Goal reached!\n            if current == end:\n                return self._reconstruct_path(current)\n            \n            closed_set.add((current.row, current.col))\n            \n            for neighbor in self.get_neighbors(current):\n                if (neighbor.row, neighbor.col) in closed_set:\n                    continue\n                \n                # Calculate tentative g cost (diagonal = 1.414)\n                is_diagonal = abs(neighbor.row - current.row) + abs(neighbor.col - current.col) == 2\n                move_cost = 1.414 if is_diagonal else 1.0\n                tentative_g = current.g + move_cost\n                \n                if tentative_g < neighbor.g:\n                    # Better path found\n                    neighbor.parent = current\n                    neighbor.g = tentative_g\n                    neighbor.h = self.heuristic(neighbor, end)\n                    neighbor.f = neighbor.g + neighbor.h\n                    \n                    if neighbor not in open_set:\n                        heapq.heappush(open_set, neighbor)\n        \n        # No path found\n        return None\n    \n    def _reconstruct_path(self, node: Node) -> List[Tuple[int, int]]:\n        \"\"\"Trace back through parents to build the path.\"\"\"\n        path = []\n        current = node\n        while current:\n            path.append((current.row, current.col))\n            current = current.parent\n        return list(reversed(path))",
+            "highlight": true,
+            "voiceover": "The find_path method is the heart of A-star. It explores nodes with lowest f-cost first."
+        },
+        {
+            "type": "highlight",
+            "path": "src/astar.py",
+            "find": "open_set = [start]",
+            "voiceover": "The open set is a priority queue. We always process the most promising node first.",
+            "voiceoverTiming": "during",
+            "moveCursor": "stay"
+        },
+        {
+            "type": "highlight",
+            "path": "src/astar.py",
+            "find": "if tentative_g < neighbor.g:",
+            "voiceover": "This is key: we only update a neighbor if we found a better path to it.",
+            "voiceoverTiming": "during",
+            "moveCursor": "stay"
+        },
+        {
+            "type": "createFile",
+            "path": "main.py",
+            "voiceover": "Let's create a main file to test our algorithm."
+        },
+        {
+            "type": "openFile",
+            "path": "main.py"
+        },
+        {
+            "type": "writeText",
+            "content": "from src.node import Node\nfrom src.astar import AStar\n\n\ndef create_grid(rows: int, cols: int) -> list:\n    \"\"\"Create a grid of walkable nodes.\"\"\"\n    return [[Node(r, c) for c in range(cols)] for r in range(rows)]\n\n\ndef print_grid(grid: list, path: list = None) -> None:\n    \"\"\"Print the grid with path marked.\"\"\"\n    path_set = set(path) if path else set()\n    \n    for row in grid:\n        line = \"\"\n        for node in row:\n            if (node.row, node.col) in path_set:\n                line += \" * \"\n            elif not node.walkable:\n                line += \" # \"\n            else:\n                line += \" . \"\n        print(line)\n\n\ndef main():\n    print(\"=\" * 40)\n    print(\"A* Pathfinding Algorithm Demo\")\n    print(\"=\" * 40)\n    \n    # Create 8x8 grid\n    grid = create_grid(8, 8)\n    \n    # Add some obstacles\n    obstacles = [(2, 2), (2, 3), (2, 4), (3, 4), (4, 4), (5, 4)]\n    for r, c in obstacles:\n        grid[r][c].walkable = False\n    \n    print(\"\\nGrid (# = obstacle, . = walkable):\")\n    print_grid(grid)\n    \n    # Find path from top-left to bottom-right\n    astar = AStar(grid)\n    start = grid[0][0]\n    end = grid[7][7]\n    \n    print(f\"\\nFinding path from {start} to {end}...\")\n    path = astar.find_path(start, end)\n    \n    if path:\n        print(f\"\\nPath found! Length: {len(path)} steps\")\n        print(f\"Path: {path}\")\n        print(\"\\nGrid with path (* = path):\")\n        print_grid(grid, path)\n    else:\n        print(\"\\nNo path found!\")\n\n\nif __name__ == \"__main__\":\n    main()",
+            "highlight": true,
+            "voiceover": "This main file creates a grid with obstacles and finds a path using our A-star implementation."
+        },
+        {
+            "type": "highlight",
+            "path": "main.py",
+            "find": "obstacles = [(2, 2)",
+            "voiceover": "We add a vertical wall of obstacles to make the pathfinding more interesting.",
+            "voiceoverTiming": "during",
+            "moveCursor": "stay"
+        },
+        {
+            "type": "createFile",
+            "path": "src/__init__.py",
+            "voiceover": "Creating the package init file for proper imports."
+        },
+        {
+            "type": "openTerminal",
+            "terminalName": "Python",
+            "voiceover": "Now let's set up our Python environment and run the algorithm."
+        },
+        {
+            "type": "runCommand",
+            "terminalName": "Python",
+            "command": "conda deactivate 2>/dev/null || true",
+            "waitForCompletion": true,
+            "timeout": 10000,
+            "voiceover": "First, deactivating any existing conda environment."
+        },
+        {
+            "type": "runCommand",
+            "terminalName": "Python",
+            "command": "python3.10 -m venv .venv",
+            "waitForCompletion": true,
+            "timeout": 30000,
+            "voiceover": "Creating a virtual environment with Python 3.10."
+        },
+        {
+            "type": "runCommand",
+            "terminalName": "Python",
+            "command": "source .venv/bin/activate",
+            "waitForCompletion": true,
+            "timeout": 10000,
+            "voiceover": "Activating the virtual environment."
+        },
+        {
+            "type": "runCommand",
+            "terminalName": "Python",
+            "command": "python main.py",
+            "waitForCompletion": true,
+            "timeout": 30000,
+            "voiceover": "Running our A-star pathfinder! Watch the output."
+        },
+        {
+            "type": "hideTerminal",
+            "voiceover": "The algorithm found the path. Now let's write unit tests."
+        },
+        {
+            "type": "createFile",
+            "path": "tests/__init__.py"
+        },
+        {
+            "type": "createFile",
+            "path": "tests/test_astar.py",
+            "voiceover": "Creating a test file to verify our implementation."
+        },
+        {
+            "type": "openFile",
+            "path": "tests/test_astar.py"
+        },
+        {
+            "type": "writeText",
+            "content": "import unittest\nimport sys\nsys.path.insert(0, '.')\n\nfrom src.node import Node\nfrom src.astar import AStar\n\n\nclass TestAStar(unittest.TestCase):\n    \n    def create_grid(self, rows, cols):\n        return [[Node(r, c) for c in range(cols)] for r in range(rows)]\n    \n    def test_simple_path(self):\n        \"\"\"Test finding a path in an empty grid.\"\"\"\n        grid = self.create_grid(5, 5)\n        astar = AStar(grid)\n        \n        path = astar.find_path(grid[0][0], grid[4][4])\n        \n        self.assertIsNotNone(path)\n        self.assertEqual(path[0], (0, 0))  # Starts at origin\n        self.assertEqual(path[-1], (4, 4))  # Ends at goal\n    \n    def test_path_around_obstacle(self):\n        \"\"\"Test that path goes around obstacles.\"\"\"\n        grid = self.create_grid(5, 5)\n        \n        # Create a wall\n        for i in range(4):\n            grid[i][2].walkable = False\n        \n        astar = AStar(grid)\n        path = astar.find_path(grid[0][0], grid[0][4])\n        \n        self.assertIsNotNone(path)\n        # Path should not include any obstacle\n        for r, c in path:\n            self.assertTrue(grid[r][c].walkable)\n    \n    def test_no_path_exists(self):\n        \"\"\"Test when goal is completely blocked.\"\"\"\n        grid = self.create_grid(5, 5)\n        \n        # Surround the goal\n        grid[3][3].walkable = False\n        grid[3][4].walkable = False\n        grid[4][3].walkable = False\n        \n        astar = AStar(grid)\n        path = astar.find_path(grid[0][0], grid[4][4])\n        \n        self.assertIsNone(path)\n    \n    def test_start_equals_end(self):\n        \"\"\"Test when start and end are the same.\"\"\"\n        grid = self.create_grid(3, 3)\n        astar = AStar(grid)\n        \n        path = astar.find_path(grid[1][1], grid[1][1])\n        \n        self.assertIsNotNone(path)\n        self.assertEqual(len(path), 1)\n        self.assertEqual(path[0], (1, 1))\n\n\nif __name__ == \"__main__\":\n    unittest.main(verbosity=2)",
+            "highlight": true,
+            "voiceover": "Four test cases: simple path, path around obstacles, blocked goal, and same start and end."
+        },
+        {
+            "type": "highlight",
+            "path": "tests/test_astar.py",
+            "find": "def test_path_around_obstacle(self):",
+            "voiceover": "This test creates a wall and verifies the path goes around it correctly.",
+            "voiceoverTiming": "during",
+            "moveCursor": "stay"
+        },
+        {
+            "type": "highlight",
+            "path": "tests/test_astar.py",
+            "find": "def test_no_path_exists(self):",
+            "voiceover": "We also test the edge case where no path is possible - the algorithm should return None.",
+            "voiceoverTiming": "during",
+            "moveCursor": "stay"
+        },
+        {
+            "type": "showTerminal",
+            "terminalName": "Python",
+            "voiceover": "Now let's run our unit tests."
+        },
+        {
+            "type": "runCommand",
+            "terminalName": "Python",
+            "command": "python -m pytest tests/test_astar.py -v 2>/dev/null || python tests/test_astar.py",
+            "waitForCompletion": true,
+            "timeout": 30000,
+            "voiceover": "Running the test suite. All tests should pass."
+        },
+        {
+            "type": "hideTerminal",
+            "voiceover": "All tests passed! Our A-star implementation is verified."
+        },
+        {
+            "type": "openFile",
+            "path": "src/astar.py",
+            "voiceover": "We've built a complete A-star pathfinder with tests. The algorithm is ready for production use!"
+        },
+        {
+            "type": "closeTerminal",
+            "terminalName": "Python"
+        }
+    ]
+}

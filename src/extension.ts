@@ -4,10 +4,11 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { AudioHandler } from './audioHandler';
 import { TimestampTracker } from './timestampTracker';
+import { TerminalHandler } from './terminalHandler';
 
 interface Action {
-  type?: 'createFolder' | 'createFile' | 'openFile' | 'writeText' | 'insert' | 'delete' | 'replace' | 'highlight';
-  action?: 'createFolder' | 'createFile' | 'openFile' | 'writeText' | 'insert' | 'delete' | 'replace' | 'highlight';
+  type?: 'createFolder' | 'createFile' | 'openFile' | 'writeText' | 'insert' | 'delete' | 'replace' | 'highlight' | 'openTerminal' | 'runCommand' | 'showTerminal' | 'hideTerminal' | 'closeTerminal';
+  action?: 'createFolder' | 'createFile' | 'openFile' | 'writeText' | 'insert' | 'delete' | 'replace' | 'highlight' | 'openTerminal' | 'runCommand' | 'showTerminal' | 'hideTerminal' | 'closeTerminal';
   path?: string;
   content?: string;
 
@@ -36,6 +37,13 @@ interface Action {
 
   // Auto-highlight executed change
   highlight?: boolean;
+
+  // Terminal options
+  terminalName?: string;
+  command?: string;
+  cwd?: string;
+  timeout?: number;
+  waitForCompletion?: boolean;
 }
 
 interface Blueprint {
@@ -49,6 +57,7 @@ interface Blueprint {
 
 let audioHandler: AudioHandler;
 let timestampTracker: TimestampTracker;
+let terminalHandler: TerminalHandler;
 
 // Global decoration type for highlights
 let currentHighlightDecoration: vscode.TextEditorDecorationType | null = null;
@@ -150,6 +159,7 @@ export function activate(context: vscode.ExtensionContext) {
 
   audioHandler = new AudioHandler();
   timestampTracker = new TimestampTracker();
+  terminalHandler = new TerminalHandler();
 
   // Create global status bar item
   globalStatusBar = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 100);
@@ -158,10 +168,13 @@ export function activate(context: vscode.ExtensionContext) {
   // Register cleanup on extension deactivation or disposal
   context.subscriptions.push({
     dispose: () => {
-      console.log('Cleaning up audio files...');
+      console.log('Cleaning up resources...');
       stopTimer();
       if (audioHandler) {
         audioHandler.cleanup();
+      }
+      if (terminalHandler) {
+        terminalHandler.dispose();
       }
       if (globalStatusBar) {
         globalStatusBar.dispose();
@@ -685,6 +698,16 @@ function getActionDescription(action: Action): string {
       return `Replacing: ${action.find?.substring(0, 20)}...`;
     case 'highlight':
       return `Highlighting: ${action.find?.substring(0, 20)}...`;
+    case 'openTerminal':
+      return `Opening terminal: ${action.terminalName || 'Build'}`;
+    case 'runCommand':
+      return `Running: ${action.command?.substring(0, 30)}...`;
+    case 'showTerminal':
+      return `Showing terminal`;
+    case 'hideTerminal':
+      return `Hiding terminal`;
+    case 'closeTerminal':
+      return `Closing terminal`;
     default:
       return action.type || 'Unknown action';
   }
@@ -1184,6 +1207,63 @@ async function executeAction(
     case 'highlight':
       throw new Error('Highlight should be handled in main loop');
 
+    case 'openTerminal': {
+      const termName = action.terminalName || 'Build';
+      const termCwd = action.cwd ? path.join(baseDir, action.cwd) : baseDir;
+      updateMessage(`$(terminal) Opening terminal: ${termName}`);
+      await terminalHandler.openTerminal(termName, termCwd);
+      await delay(500);
+      break;
+    }
+
+    case 'runCommand': {
+      if (!action.command) throw new Error('runCommand requires command');
+      const termName = action.terminalName || 'Build';
+
+      if (!terminalHandler.hasTerminal(termName)) {
+        await terminalHandler.openTerminal(termName, baseDir);
+      }
+
+      updateMessage(`$(terminal) Running: ${action.command}`);
+
+      if (action.waitForCompletion !== false) {
+        const result = await terminalHandler.runCommand(termName, action.command, {
+          timeout: action.timeout || 120000
+        });
+
+        if (!result.success) {
+          console.warn(`Command may have failed: ${action.command}`);
+        }
+
+        console.log(`Command completed in ${result.duration}ms`);
+      } else {
+        terminalHandler.sendCommand(termName, action.command);
+      }
+      break;
+    }
+
+    case 'showTerminal': {
+      const termName = action.terminalName || 'Build';
+      updateMessage(`$(terminal) Showing terminal: ${termName}`);
+      terminalHandler.showTerminal(termName);
+      await delay(300);
+      break;
+    }
+
+    case 'hideTerminal':
+      updateMessage(`$(window) Hiding terminal`);
+      terminalHandler.hideTerminal();
+      await delay(300);
+      break;
+
+    case 'closeTerminal': {
+      const termName = action.terminalName || 'Build';
+      updateMessage(`$(close) Closing terminal: ${termName}`);
+      terminalHandler.closeTerminal(termName);
+      await delay(300);
+      break;
+    }
+
     default:
       throw new Error(`Unknown action type: ${action.type}`);
   }
@@ -1585,6 +1665,10 @@ export function deactivate() {
 
   if (audioHandler) {
     audioHandler.cleanup();
+  }
+
+  if (terminalHandler) {
+    terminalHandler.dispose();
   }
 
   if (currentHighlightDecoration) {
