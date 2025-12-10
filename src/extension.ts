@@ -6,6 +6,7 @@ import { AudioHandler } from './audioHandler';
 import { TimestampTracker } from './timestampTracker';
 import { TerminalHandler } from './terminalHandler';
 import { StatusReporter } from './statusReporter';
+import { HttpServer } from './httpServer';
 
 interface Action {
   type?: 'createFolder' | 'createFile' | 'openFile' | 'writeText' | 'insert' | 'delete' | 'replace' | 'highlight' | 'openTerminal' | 'runCommand' | 'showTerminal' | 'hideTerminal' | 'closeTerminal';
@@ -60,6 +61,7 @@ let audioHandler: AudioHandler;
 let timestampTracker: TimestampTracker;
 let terminalHandler: TerminalHandler;
 let statusReporter: StatusReporter;
+let httpServer: HttpServer;
 
 // Global decoration type for highlights
 let currentHighlightDecoration: vscode.TextEditorDecorationType | null = null;
@@ -164,6 +166,22 @@ export function activate(context: vscode.ExtensionContext) {
   terminalHandler = new TerminalHandler();
   statusReporter = new StatusReporter(); // Reports to http://localhost:5555
 
+  // Start HTTP server for automation
+  console.log('[DEBUG] Reading HTTP server configuration...');
+  const config = vscode.workspace.getConfiguration('json-project-builder');
+  const serverEnabled = config.get<boolean>('server.enabled', true);
+  const serverPort = config.get<number>('server.port', 3000);
+
+  console.log(`[DEBUG] Server config: enabled=${serverEnabled}, port=${serverPort}`);
+
+  console.log('[DEBUG] Creating HttpServer instance...');
+  httpServer = new HttpServer(serverPort, serverEnabled);
+
+  console.log('[DEBUG] Starting HTTP server...');
+  httpServer.start().catch(err => {
+    console.error('Failed to start HTTP server:', err);
+  });
+
   // Create global status bar item
   globalStatusBar = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 100);
   context.subscriptions.push(globalStatusBar);
@@ -178,6 +196,11 @@ export function activate(context: vscode.ExtensionContext) {
       }
       if (terminalHandler) {
         terminalHandler.dispose();
+      }
+      if (httpServer) {
+        httpServer.stop().catch(err => {
+          console.error('Error stopping HTTP server:', err);
+        });
       }
       if (globalStatusBar) {
         globalStatusBar.dispose();
@@ -423,6 +446,19 @@ export function activate(context: vscode.ExtensionContext) {
         // Report blueprint start to Python server
         statusReporter.reportStart(fileName, totalActions);
 
+        // Update HTTP server progress state
+        if (httpServer) {
+          httpServer.updateProgress({
+            busy: true,
+            status: 'processing',
+            blueprint: fileName,
+            currentStep: 0,
+            totalSteps: totalActions,
+            currentAction: 'Starting...',
+            error: null
+          });
+        }
+
         // Flag to track if this blueprint completed successfully
         let blueprintSuccess = true;
         let blueprintError = '';
@@ -435,6 +471,14 @@ export function activate(context: vscode.ExtensionContext) {
 
             // Update current status message for timer
             currentStatusMessage = `$(rocket) [${i + 1}/${totalActions}] ${actionName}`;
+
+            // Update HTTP server progress
+            if (httpServer) {
+              httpServer.updateProgress({
+                currentStep: i + 1,
+                currentAction: actionName
+              });
+            }
 
             // Report action start to Python server
             statusReporter.reportActionStart(i + 1, totalActions, actionName);
@@ -574,6 +618,14 @@ export function activate(context: vscode.ExtensionContext) {
               blueprintSuccess = false;
               blueprintError = `Error at step ${i + 1} (${action.type}): ${errorMessage}`;
 
+              // Update HTTP server progress with error
+              if (httpServer) {
+                httpServer.updateProgress({
+                  status: 'error',
+                  error: errorMessage
+                });
+              }
+
               // Report error to Python server
               statusReporter.reportActionError(i + 1, totalActions, actionName, errorMessage);
 
@@ -648,10 +700,22 @@ export function activate(context: vscode.ExtensionContext) {
           results.push({ file: fileName, success: true });
           currentStatusMessage = `$(check) ${fileName} completed`;
           statusReporter.reportBlueprintDone(fileName, true);
+
+          // Update HTTP server progress - done
+          if (httpServer) {
+            httpServer.updateProgress({
+              busy: false,
+              status: 'done',
+              currentStep: totalActions
+            });
+          }
+
           await delay(2000);
         } else {
           results.push({ file: fileName, success: false, error: blueprintError });
           statusReporter.reportBlueprintDone(fileName, false);
+
+          // HTTP server already updated with error in catch block
         }
 
         // RECORD END OF THIS BLUEPRINT (always)
@@ -697,6 +761,11 @@ export function activate(context: vscode.ExtensionContext) {
       globalStatusBar.text = `${finalTimer} $(check) Timestamps saved to timestamps.txt`;
       await delay(3000);
 
+      // Reset HTTP server progress to idle
+      if (httpServer) {
+        httpServer.resetProgress();
+      }
+
       globalStatusBar.hide();
     } catch (error) {
       // Handle any unexpected errors
@@ -709,6 +778,15 @@ export function activate(context: vscode.ExtensionContext) {
       // Report fatal error to Python server
       statusReporter.reportError(`Fatal extension error: ${errorMessage}`);
       statusReporter.reportAllDone(0, 1); // Signal failure
+
+      // Update HTTP server progress with fatal error
+      if (httpServer) {
+        httpServer.updateProgress({
+          busy: false,
+          status: 'error',
+          error: `Fatal error: ${errorMessage}`
+        });
+      }
 
       await delay(5000);
       globalStatusBar.hide();

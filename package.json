@@ -9,6 +9,9 @@
   "categories": [
     "Other"
   ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
   "main": "./out/extension.js",
   "contributes": {
     "commands": [
@@ -24,7 +27,22 @@
         "command": "json-project-builder.testWithPath",
         "title": "JSON Project Builder: Test with Path"
       }
-    ]
+    ],
+    "configuration": {
+      "title": "JSON Project Builder",
+      "properties": {
+        "json-project-builder.server.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable HTTP server for automation (allows triggering blueprints via POST requests)"
+        },
+        "json-project-builder.server.port": {
+          "type": "number",
+          "default": 3000,
+          "description": "Port number for HTTP server"
+        }
+      }
+    }
   },
   "scripts": {
     "vscode:prepublish": "npm run compile",
