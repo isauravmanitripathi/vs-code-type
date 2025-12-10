@@ -5,6 +5,7 @@ import * as path from 'path';
 import { AudioHandler } from './audioHandler';
 import { TimestampTracker } from './timestampTracker';
 import { TerminalHandler } from './terminalHandler';
+import { StatusReporter } from './statusReporter';
 
 interface Action {
   type?: 'createFolder' | 'createFile' | 'openFile' | 'writeText' | 'insert' | 'delete' | 'replace' | 'highlight' | 'openTerminal' | 'runCommand' | 'showTerminal' | 'hideTerminal' | 'closeTerminal';
@@ -58,6 +59,7 @@ interface Blueprint {
 let audioHandler: AudioHandler;
 let timestampTracker: TimestampTracker;
 let terminalHandler: TerminalHandler;
+let statusReporter: StatusReporter;
 
 // Global decoration type for highlights
 let currentHighlightDecoration: vscode.TextEditorDecorationType | null = null;
@@ -160,6 +162,7 @@ export function activate(context: vscode.ExtensionContext) {
   audioHandler = new AudioHandler();
   timestampTracker = new TimestampTracker();
   terminalHandler = new TerminalHandler();
+  statusReporter = new StatusReporter(); // Reports to http://localhost:5555
 
   // Create global status bar item
   globalStatusBar = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 100);
@@ -182,24 +185,46 @@ export function activate(context: vscode.ExtensionContext) {
     }
   });
 
-  let disposable = vscode.commands.registerCommand('json-project-builder.buildFromJson', async () => {
-    const fileUri = await vscode.window.showOpenDialog({
-      canSelectMany: false,
-      canSelectFiles: true,
-      canSelectFolders: true,
-      filters: { 'JSON Files': ['json'] },
-      openLabel: 'Select Blueprint JSON or Folder'
-    });
+  // Command accepts optional path argument for automation
+  // Usage: vscode.commands.executeCommand('json-project-builder.buildFromJson', '/path/to/file.json')
+  let disposable = vscode.commands.registerCommand('json-project-builder.buildFromJson', async (pathArg?: string) => {
+    let selectedPath: string;
 
-    if (!fileUri || fileUri.length === 0) {
-      globalStatusBar.text = '$(error) No file or folder selected';
+    if (pathArg && typeof pathArg === 'string') {
+      // Path provided programmatically (for automation)
+      selectedPath = pathArg;
+      console.log(`[StatusReporter] Using provided path: ${selectedPath}`);
+    } else {
+      // Show file picker dialog
+      const fileUri = await vscode.window.showOpenDialog({
+        canSelectMany: false,
+        canSelectFiles: true,
+        canSelectFolders: true,
+        filters: { 'JSON Files': ['json'] },
+        openLabel: 'Select Blueprint JSON or Folder'
+      });
+
+      if (!fileUri || fileUri.length === 0) {
+        globalStatusBar.text = '$(error) No file or folder selected';
+        globalStatusBar.show();
+        await delay(3000);
+        globalStatusBar.hide();
+        return;
+      }
+
+      selectedPath = fileUri[0].fsPath;
+    }
+
+    // Validate path exists
+    if (!fs.existsSync(selectedPath)) {
+      const errorMsg = `Path does not exist: ${selectedPath}`;
+      globalStatusBar.text = `$(error) ${errorMsg}`;
       globalStatusBar.show();
+      statusReporter.reportError(errorMsg);
       await delay(3000);
       globalStatusBar.hide();
       return;
     }
-
-    const selectedPath = fileUri[0].fsPath;
     const stats = fs.statSync(selectedPath);
 
     let blueprintFiles: string[] = [];
@@ -395,6 +420,9 @@ export function activate(context: vscode.ExtensionContext) {
 
         const totalActions = blueprint.actions.length;
 
+        // Report blueprint start to Python server
+        statusReporter.reportStart(fileName, totalActions);
+
         // Flag to track if this blueprint completed successfully
         let blueprintSuccess = true;
         let blueprintError = '';
@@ -407,6 +435,9 @@ export function activate(context: vscode.ExtensionContext) {
 
             // Update current status message for timer
             currentStatusMessage = `$(rocket) [${i + 1}/${totalActions}] ${actionName}`;
+
+            // Report action start to Python server
+            statusReporter.reportActionStart(i + 1, totalActions, actionName);
 
             // DETAILED CONSOLE LOGGING
             console.log(`\n${'='.repeat(60)}`);
@@ -513,6 +544,7 @@ export function activate(context: vscode.ExtensionContext) {
                 }
 
                 console.log(`✅ ${action.type} completed successfully`);
+                statusReporter.reportActionComplete(i + 1, totalActions);
 
                 if (enableVoiceover && voiceoverTiming === 'after') {
                   console.log(`🎤 Playing voiceover AFTER action...`);
@@ -541,6 +573,9 @@ export function activate(context: vscode.ExtensionContext) {
               // Log the error for this blueprint but don't stop processing
               blueprintSuccess = false;
               blueprintError = `Error at step ${i + 1} (${action.type}): ${errorMessage}`;
+
+              // Report error to Python server
+              statusReporter.reportActionError(i + 1, totalActions, actionName, errorMessage);
 
               // DETAILED CONSOLE ERROR LOGGING
               console.error(`\n${'❌'.repeat(30)}`);
@@ -612,9 +647,11 @@ export function activate(context: vscode.ExtensionContext) {
         if (blueprintSuccess) {
           results.push({ file: fileName, success: true });
           currentStatusMessage = `$(check) ${fileName} completed`;
+          statusReporter.reportBlueprintDone(fileName, true);
           await delay(2000);
         } else {
           results.push({ file: fileName, success: false, error: blueprintError });
+          statusReporter.reportBlueprintDone(fileName, false);
         }
 
         // RECORD END OF THIS BLUEPRINT (always)
@@ -640,6 +677,9 @@ export function activate(context: vscode.ExtensionContext) {
       const successCount = results.filter(r => r.success).length;
       const failCount = results.filter(r => !r.success).length;
 
+      // Report all done to Python server
+      statusReporter.reportAllDone(successCount, failCount);
+
       const finalTimer = timestampTracker.getElapsedFormatted();
 
       if (failCount === 0) {
@@ -662,8 +702,14 @@ export function activate(context: vscode.ExtensionContext) {
       // Handle any unexpected errors
       stopTimer();
       const finalTimer = timestampTracker.getElapsedFormatted();
-      globalStatusBar.text = `${finalTimer} $(error) Extension error: ${error}`;
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      globalStatusBar.text = `${finalTimer} $(error) Extension error: ${errorMessage}`;
       console.error('Extension error:', error);
+
+      // Report fatal error to Python server
+      statusReporter.reportError(`Fatal extension error: ${errorMessage}`);
+      statusReporter.reportAllDone(0, 1); // Signal failure
+
       await delay(5000);
       globalStatusBar.hide();
     } finally {
@@ -675,6 +721,46 @@ export function activate(context: vscode.ExtensionContext) {
   });
 
   context.subscriptions.push(disposable);
+
+  // Register alias command for automation (requires path argument)
+  let pathDisposable = vscode.commands.registerCommand('json-project-builder.buildFromPath', async (pathArg: string) => {
+    if (!pathArg || typeof pathArg !== 'string') {
+      vscode.window.showErrorMessage('buildFromPath requires a path argument');
+      statusReporter.reportError('buildFromPath called without path argument');
+      return;
+    }
+    // Delegate to main command with the path
+    await vscode.commands.executeCommand('json-project-builder.buildFromJson', pathArg);
+  });
+
+  context.subscriptions.push(pathDisposable);
+
+  // Register test command with input box for easy development testing
+  let testDisposable = vscode.commands.registerCommand('json-project-builder.testWithPath', async () => {
+    const pathInput = await vscode.window.showInputBox({
+      prompt: 'Enter the full path to your JSON blueprint file',
+      placeHolder: '/Volumes/hard-drive/auto-write-vs-code/json-project-builder/rust-demo.json',
+      validateInput: (value) => {
+        if (!value || value.trim().length === 0) {
+          return 'Path cannot be empty';
+        }
+        if (!value.endsWith('.json')) {
+          return 'Path must point to a .json file';
+        }
+        return null;
+      }
+    });
+
+    if (!pathInput) {
+      vscode.window.showInformationMessage('No path provided');
+      return;
+    }
+
+    // Execute with the provided path
+    await vscode.commands.executeCommand('json-project-builder.buildFromJson', pathInput.trim());
+  });
+
+  context.subscriptions.push(testDisposable);
 }
 
 function getActionDescription(action: Action): string {

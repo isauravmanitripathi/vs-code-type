@@ -15,6 +15,14 @@
       {
         "command": "json-project-builder.buildFromJson",
         "title": "Build Project from JSON Blueprint"
+      },
+      {
+        "command": "json-project-builder.buildFromPath",
+        "title": "Build Project from Path (Automation)"
+      },
+      {
+        "command": "json-project-builder.testWithPath",
+        "title": "JSON Project Builder: Test with Path"
       }
     ]
   },
