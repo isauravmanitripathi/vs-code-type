@@ -57,7 +57,7 @@ export class HttpServer {
             error: null
         };
 
-    constructor(port: number = 3000, enabled: boolean = true) {
+    constructor(port: number = 6969, enabled: boolean = true) {
         this.port = port;
         this.enabled = enabled;
     }

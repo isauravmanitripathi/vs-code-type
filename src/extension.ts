@@ -170,7 +170,7 @@ export function activate(context: vscode.ExtensionContext) {
   console.log('[DEBUG] Reading HTTP server configuration...');
   const config = vscode.workspace.getConfiguration('json-project-builder');
   const serverEnabled = config.get<boolean>('server.enabled', true);
-  const serverPort = config.get<number>('server.port', 3000);
+  const serverPort = config.get<number>('server.port', 6969);
 
   console.log(`[DEBUG] Server config: enabled=${serverEnabled}, port=${serverPort}`);
 
