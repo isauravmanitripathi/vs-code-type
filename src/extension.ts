@@ -408,7 +408,7 @@ export function activate(context: vscode.ExtensionContext) {
           fs.mkdirSync(baseDir, { recursive: true });
         }
 
-        const globalTypingSpeed = blueprint.globalTypingSpeed || 50;
+        const globalTypingSpeed = blueprint.globalTypingSpeed || 150; // 150ms per character for human-like typing
         const actionDelay = blueprint.actionDelay || 800;
         const defaultVoice = blueprint.defaultVoice || 'en-US-AriaNeural';
         const enableVoiceover = blueprint.enableVoiceover !== false;
