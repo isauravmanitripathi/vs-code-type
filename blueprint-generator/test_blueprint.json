@@ -1,0 +1,109 @@
+{
+  "rootFolder": "test_sample-demo",
+  "globalTypingSpeed": 35,
+  "actionDelay": 1000,
+  "defaultVoice": "en-US-BrianNeural",
+  "enableVoiceover": true,
+  "actions": [
+    {
+      "type": "createFile",
+      "path": "test_sample.py",
+      "voiceover": "Let's create the test_sample.py file.",
+      "voiceoverTiming": "before"
+    },
+    {
+      "type": "openFile",
+      "path": "test_sample.py"
+    },
+    {
+      "type": "writeText",
+      "content": "import pandas as pd\nimport numpy as np\n"
+    },
+    {
+      "type": "highlight",
+      "path": "test_sample.py",
+      "find": "import pandas as pd",
+      "voiceover": "Importing necessary libraries for data handling",
+      "voiceoverTiming": "during",
+      "moveCursor": "endOfFile"
+    },
+    {
+      "type": "writeText",
+      "content": "SEED = 42\n"
+    },
+    {
+      "type": "highlight",
+      "path": "test_sample.py",
+      "find": "SEED = 42",
+      "voiceover": "Setting the random seed for reproducibility",
+      "voiceoverTiming": "during",
+      "moveCursor": "endOfFile"
+    },
+    {
+      "type": "writeText",
+      "content": "np.random.seed(SEED)\n"
+    },
+    {
+      "type": "writeText",
+      "content": "\n"
+    },
+    {
+      "type": "writeText",
+      "content": "def calculate_mean(data):\n    total = sum(data)\n    count = len(data)\n    return total / count\n",
+      "highlight": true
+    },
+    {
+      "type": "highlight",
+      "path": "test_sample.py",
+      "find": "def calculate_mean(data):",
+      "voiceover": "Calculates the mean of the input data array.\nThis function serves as a basic statistical operation\nthat we'll use throughout our analysis.",
+      "voiceoverTiming": "during",
+      "moveCursor": "endOfFile"
+    },
+    {
+      "type": "writeText",
+      "content": "\n"
+    },
+    {
+      "type": "writeText",
+      "content": "def process_results(results):\n    filtered = [x for x in results if x > 0]  # Filter positive values\n    normalized = [x / max(filtered) for x in filtered]  # Normalize\n    return normalized\n",
+      "highlight": true
+    },
+    {
+      "type": "highlight",
+      "path": "test_sample.py",
+      "find": "def process_results(results):",
+      "voiceover": "Processes the results and returns formatted output.\nWe apply filtering and transformation to clean the data\nbefore returning the final processed result.",
+      "voiceoverTiming": "during",
+      "moveCursor": "endOfFile"
+    },
+    {
+      "type": "highlight",
+      "path": "test_sample.py",
+      "find": "filtered = [x for x in results if x > 0]",
+      "voiceover": "Filter positive values",
+      "voiceoverTiming": "during",
+      "moveCursor": "endOfFile"
+    },
+    {
+      "type": "highlight",
+      "path": "test_sample.py",
+      "find": "normalized = [x / max(filtered) for x in filtered]",
+      "voiceover": "Normalize",
+      "voiceoverTiming": "during",
+      "moveCursor": "endOfFile"
+    },
+    {
+      "type": "writeText",
+      "content": "if __name__ == '__main__':\n    data = [1, 2, 3, 4, 5]\n    print(calculate_mean(data))\n"
+    },
+    {
+      "type": "highlight",
+      "path": "test_sample.py",
+      "find": "if __name__ == '__main__':",
+      "voiceover": "Main execution block",
+      "voiceoverTiming": "during",
+      "moveCursor": "endOfFile"
+    }
+  ]
+}
