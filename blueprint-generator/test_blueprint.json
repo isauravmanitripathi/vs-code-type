@@ -49,7 +49,15 @@
     },
     {
       "type": "writeText",
+      "content": "\n"
+    },
+    {
+      "type": "writeText",
       "content": "import os\n"
+    },
+    {
+      "type": "writeText",
+      "content": "\n\n"
     },
     {
       "type": "writeText",
@@ -77,6 +85,10 @@
     },
     {
       "type": "writeText",
+      "content": "\n\n\n"
+    },
+    {
+      "type": "writeText",
       "content": "SP500_df = pd.read_csv('data/SPXconst.csv')\n"
     },
     {
@@ -97,6 +109,10 @@
     },
     {
       "type": "writeText",
+      "content": "\n\n"
+    },
+    {
+      "type": "writeText",
       "content": "constituents = {'-'.join(col.split('/')[::-1]):set(SP500_df[col].dropna()) \n                for col in SP500_df.columns}\n"
     },
     {
@@ -106,6 +122,10 @@
       "voiceover": "Create dictionary mapping 'YYYY-MM' to set of stock tickers",
       "voiceoverTiming": "during",
       "moveCursor": "endOfFile"
+    },
+    {
+      "type": "writeText",
+      "content": "\n\n"
     },
     {
       "type": "writeText",
@@ -158,7 +178,7 @@
     },
     {
       "type": "writeText",
-      "content": "\n"
+      "content": "\n\n"
     },
     {
       "type": "writeText",
@@ -291,7 +311,7 @@
     },
     {
       "type": "writeText",
-      "content": "\n"
+      "content": "\n\n"
     },
     {
       "type": "writeText",
@@ -382,6 +402,10 @@
     },
     {
       "type": "writeText",
+      "content": "\n\n\n\n\n\n"
+    },
+    {
+      "type": "writeText",
       "content": "model_folder = 'models-Intraday-240-3-LSTM'\n"
     },
     {
@@ -399,6 +423,10 @@
     {
       "type": "writeText",
       "content": "for directory in [model_folder,result_folder]:\n    if not os.path.exists(directory):\n        os.makedirs(directory)\n"
+    },
+    {
+      "type": "writeText",
+      "content": "\n\n"
     },
     {
       "type": "writeText",

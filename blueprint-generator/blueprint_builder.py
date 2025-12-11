@@ -191,10 +191,6 @@ class BlueprintBuilder:
     
     def _process_function(self, segment: CodeSegment) -> None:
         """Process function definitions."""
-        # Add blank line before function if not first
-        if self.actions:
-            self._add_write_text('\n')
-        
         # Strip inline comments from code - they'll be added via highlight actions later
         clean_code = self._strip_inline_comments(segment.code, segment.inline_comments)
         
@@ -231,10 +227,6 @@ class BlueprintBuilder:
     
     def _process_class(self, segment: CodeSegment) -> None:
         """Process class definitions."""
-        # Add blank line before class if not first
-        if self.actions:
-            self._add_write_text('\n')
-        
         # Strip inline comments from code - they'll be added via highlight actions later
         clean_code = self._strip_inline_comments(segment.code, segment.inline_comments)
         
@@ -340,8 +332,19 @@ class BlueprintBuilder:
             "path": self.filename
         })
         
+        # Track the last line we wrote to preserve spacing
+        last_end_line = 0
+        
         # Process each segment based on its type
         for segment in segments:
+            # Add blank lines to preserve original spacing
+            if last_end_line > 0:
+                # Calculate gap between previous segment end and this segment start
+                gap = segment.start_line - last_end_line - 1
+                if gap > 0:
+                    # Add the blank lines
+                    self._add_write_text('\n' * gap)
+            
             if segment.segment_type == 'imports':
                 self._process_imports(segment)
             elif segment.segment_type == 'function':
@@ -352,6 +355,9 @@ class BlueprintBuilder:
                 self._process_variable(segment)
             else:
                 self._process_generic_code(segment)
+            
+            # Update last end line
+            last_end_line = segment.end_line
         
         # Build final blueprint
         blueprint = {
