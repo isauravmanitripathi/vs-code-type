@@ -132,6 +132,43 @@ class BlueprintBuilder:
                 return stripped
         return self._get_first_line(code)
     
+    def _strip_inline_comments(self, code: str, inline_comments: list) -> str:
+        """
+        Remove inline # comments from code for cleaner typing.
+        The comments will be added back via highlight actions.
+        
+        Args:
+            code: The code to clean
+            inline_comments: List of inline comment dicts with 'line' keys
+            
+        Returns:
+            Code with inline comments stripped
+        """
+        if not inline_comments:
+            return code
+            
+        lines = code.split('\n')
+        # Get the line numbers that have inline comments (relative to segment start)
+        # We need to identify which lines have inline comments and strip the # part
+        
+        cleaned_lines = []
+        for line in lines:
+            # Check if this line has an inline comment (has # after code)
+            if '#' in line:
+                # Split on first # that's not in a string
+                # Simple approach: split on # and keep only the code part
+                code_part = line.split('#')[0]
+                # Only strip if there's actual code before the #
+                if code_part.strip():
+                    cleaned_lines.append(code_part.rstrip())
+                else:
+                    # This is a comment-only line (starts with #), keep it
+                    cleaned_lines.append(line)
+            else:
+                cleaned_lines.append(line)
+        
+        return '\n'.join(cleaned_lines)
+    
     def _process_imports(self, segment: CodeSegment) -> None:
         """Process import statements."""
         # Write the imports
@@ -158,20 +195,23 @@ class BlueprintBuilder:
         if self.actions:
             self._add_write_text('\n')
         
+        # Strip inline comments from code - they'll be added via highlight actions later
+        clean_code = self._strip_inline_comments(segment.code, segment.inline_comments)
+        
         # For functions with docstrings: voiceover DURING typing (no separate highlight)
         # For functions with # comment above: write then highlight
         if segment.docstring:
             # Docstring becomes voiceover while typing - no separate highlight
             self._add_write_text(
-                segment.code + '\n', 
+                clean_code + '\n', 
                 highlight=True,
                 voiceover=segment.docstring,
                 voiceover_timing="during"
             )
         elif segment.comment_above:
             # # comment above - write then highlight the function signature
-            self._add_write_text(segment.code + '\n', highlight=True)
-            func_sig = self._get_function_signature(segment.code)
+            self._add_write_text(clean_code + '\n', highlight=True)
+            func_sig = self._get_function_signature(clean_code)
             self._add_highlight(
                 find_pattern=func_sig,
                 voiceover=segment.comment_above,
@@ -179,9 +219,10 @@ class BlueprintBuilder:
             )
         else:
             # No voiceover, just write
-            self._add_write_text(segment.code + '\n', highlight=True)
+            self._add_write_text(clean_code + '\n', highlight=True)
         
-        # Handle inline comments - highlight specific lines (these are # comments)
+        # Handle inline comments - highlight specific lines and add comment as voiceover
+        # These are typed AFTER the function is fully typed with docstring voiceover
         for inline in segment.inline_comments:
             self._add_highlight(
                 find_pattern=inline['code'],
@@ -194,20 +235,23 @@ class BlueprintBuilder:
         if self.actions:
             self._add_write_text('\n')
         
+        # Strip inline comments from code - they'll be added via highlight actions later
+        clean_code = self._strip_inline_comments(segment.code, segment.inline_comments)
+        
         # For classes with docstrings: voiceover DURING typing (no separate highlight)
         # For classes with # comment above: write then highlight
         if segment.docstring:
             # Docstring becomes voiceover while typing - no separate highlight
             self._add_write_text(
-                segment.code + '\n', 
+                clean_code + '\n', 
                 highlight=True,
                 voiceover=segment.docstring,
                 voiceover_timing="during"
             )
         elif segment.comment_above:
             # # comment above - write then highlight the class definition
-            self._add_write_text(segment.code + '\n', highlight=True)
-            first_line = self._get_first_line(segment.code)
+            self._add_write_text(clean_code + '\n', highlight=True)
+            first_line = self._get_first_line(clean_code)
             self._add_highlight(
                 find_pattern=first_line,
                 voiceover=segment.comment_above,
@@ -215,9 +259,9 @@ class BlueprintBuilder:
             )
         else:
             # No voiceover, just write
-            self._add_write_text(segment.code + '\n', highlight=True)
+            self._add_write_text(clean_code + '\n', highlight=True)
         
-        # Handle inline comments (# style) - these still get highlighted
+        # Handle inline comments (# style) - these get highlighted after typing
         for inline in segment.inline_comments:
             self._add_highlight(
                 find_pattern=inline['code'],
@@ -226,12 +270,15 @@ class BlueprintBuilder:
     
     def _process_variable(self, segment: CodeSegment) -> None:
         """Process variable assignments."""
+        # Strip inline comments from code
+        clean_code = self._strip_inline_comments(segment.code, segment.inline_comments)
+        
         # Write the variable assignment
-        self._add_write_text(segment.code + '\n')
+        self._add_write_text(clean_code + '\n')
         
         # If there's a comment above, highlight and explain
         if segment.comment_above:
-            first_line = self._get_first_line(segment.code)
+            first_line = self._get_first_line(clean_code)
             self._add_highlight(
                 find_pattern=first_line,
                 voiceover=segment.comment_above
@@ -246,18 +293,21 @@ class BlueprintBuilder:
     
     def _process_generic_code(self, segment: CodeSegment) -> None:
         """Process generic code blocks."""
+        # Strip inline comments from code
+        clean_code = self._strip_inline_comments(segment.code, segment.inline_comments)
+        
         # Write the code
-        self._add_write_text(segment.code + '\n')
+        self._add_write_text(clean_code + '\n')
         
         # If there's a comment above, highlight and explain
         if segment.comment_above:
-            first_line = self._get_first_line(segment.code)
+            first_line = self._get_first_line(clean_code)
             self._add_highlight(
                 find_pattern=first_line,
                 voiceover=segment.comment_above
             )
         
-        # Handle inline comments
+        # Handle inline comments - highlight after typing
         for inline in segment.inline_comments:
             self._add_highlight(
                 find_pattern=inline['code'],
