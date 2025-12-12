@@ -7,139 +7,207 @@
   "actions": [
     {
       "type": "createFolder",
-      "path": "data"
+      "path": "data",
+      "voiceover": "Now we will create a folder data.",
+      "voiceoverTiming": "before"
     },
     {
       "type": "createFolder",
-      "path": "files"
+      "path": "files",
+      "voiceover": "Now we will create a folder files.",
+      "voiceoverTiming": "before"
     },
     {
       "type": "createFolder",
-      "path": "json_file"
+      "path": "json_file",
+      "voiceover": "Now we will create a folder json_file.",
+      "voiceoverTiming": "before"
     },
     {
       "type": "createFolder",
-      "path": "nano-banaan"
+      "path": "nano-banaan",
+      "voiceover": "Now we will create a folder nano-banaan.",
+      "voiceoverTiming": "before"
     },
     {
       "type": "createFolder",
-      "path": "result-images"
+      "path": "result-images",
+      "voiceover": "Now we will create a folder result-images.",
+      "voiceoverTiming": "before"
     },
     {
       "type": "createFile",
-      "path": "Statistics.py"
+      "path": "Statistics.py",
+      "voiceover": "Now we will create a file Statistics.py.",
+      "voiceoverTiming": "before"
     },
     {
       "type": "createFile",
-      "path": "data/Close-1990.csv"
+      "path": "data/Close-1990.csv",
+      "voiceover": "Now we will create a file data/Close-1990.csv.",
+      "voiceoverTiming": "before"
     },
     {
       "type": "createFile",
-      "path": "data/Open-1990.csv"
+      "path": "data/Open-1990.csv",
+      "voiceover": "Now we will create a file data/Open-1990.csv.",
+      "voiceoverTiming": "before"
     },
     {
       "type": "createFile",
-      "path": "data/README.md"
+      "path": "data/README.md",
+      "voiceover": "Now we will create a file data/README.md.",
+      "voiceoverTiming": "before"
     },
     {
       "type": "createFile",
-      "path": "data/SPXconst.csv"
+      "path": "data/SPXconst.csv",
+      "voiceover": "Now we will create a file data/SPXconst.csv.",
+      "voiceoverTiming": "before"
     },
     {
       "type": "createFile",
-      "path": "files/train_intraday_rf_multi.py"
+      "path": "files/train_intraday_rf_multi.py",
+      "voiceover": "Now we will create a file files/train_intraday_rf_multi.py.",
+      "voiceoverTiming": "before"
     },
     {
       "type": "createFile",
-      "path": "files/train_nextday_lstm.py"
+      "path": "files/train_nextday_lstm.py",
+      "voiceover": "Now we will create a file files/train_nextday_lstm.py.",
+      "voiceoverTiming": "before"
     },
     {
       "type": "createFile",
-      "path": "json_file/statistics_implementation.json"
+      "path": "json_file/statistics_implementation.json",
+      "voiceover": "Now we will create a file json_file/statistics_implementation.json.",
+      "voiceoverTiming": "before"
     },
     {
       "type": "createFile",
-      "path": "json_file/stock_forecast_blueprint.json"
+      "path": "json_file/stock_forecast_blueprint.json",
+      "voiceover": "Now we will create a file json_file/stock_forecast_blueprint.json.",
+      "voiceoverTiming": "before"
     },
     {
       "type": "createFile",
-      "path": "nano-banaan/train_nextday_rf.py"
+      "path": "nano-banaan/train_nextday_rf.py",
+      "voiceover": "Now we will create a file nano-banaan/train_nextday_rf.py.",
+      "voiceoverTiming": "before"
     },
     {
       "type": "createFile",
-      "path": "result-images/HP_cell_LSTM_result.jpg"
+      "path": "result-images/HP_cell_LSTM_result.jpg",
+      "voiceover": "Now we will create a file result-images/HP_cell_LSTM_result.jpg.",
+      "voiceoverTiming": "before"
     },
     {
       "type": "createFile",
-      "path": "result-images/barRet1.jpg"
+      "path": "result-images/barRet1.jpg",
+      "voiceover": "Now we will create a file result-images/barRet1.jpg.",
+      "voiceoverTiming": "before"
     },
     {
       "type": "createFile",
-      "path": "result-images/barRet2.jpg"
+      "path": "result-images/barRet2.jpg",
+      "voiceover": "Now we will create a file result-images/barRet2.jpg.",
+      "voiceoverTiming": "before"
     },
     {
       "type": "createFile",
-      "path": "result-images/barRet3.jpg"
+      "path": "result-images/barRet3.jpg",
+      "voiceover": "Now we will create a file result-images/barRet3.jpg.",
+      "voiceoverTiming": "before"
     },
     {
       "type": "createFile",
-      "path": "result-images/barSharpe1.jpg"
+      "path": "result-images/barSharpe1.jpg",
+      "voiceover": "Now we will create a file result-images/barSharpe1.jpg.",
+      "voiceoverTiming": "before"
     },
     {
       "type": "createFile",
-      "path": "result-images/barSharpe2.jpg"
+      "path": "result-images/barSharpe2.jpg",
+      "voiceover": "Now we will create a file result-images/barSharpe2.jpg.",
+      "voiceoverTiming": "before"
     },
     {
       "type": "createFile",
-      "path": "result-images/barSharpe3.jpg"
+      "path": "result-images/barSharpe3.jpg",
+      "voiceover": "Now we will create a file result-images/barSharpe3.jpg.",
+      "voiceoverTiming": "before"
     },
     {
       "type": "createFile",
-      "path": "result-images/feature_importance_2.jpg"
+      "path": "result-images/feature_importance_2.jpg",
+      "voiceover": "Now we will create a file result-images/feature_importance_2.jpg.",
+      "voiceoverTiming": "before"
     },
     {
       "type": "createFile",
-      "path": "result-images/feature_importance_result.jpg"
+      "path": "result-images/feature_importance_result.jpg",
+      "voiceover": "Now we will create a file result-images/feature_importance_result.jpg.",
+      "voiceoverTiming": "before"
     },
     {
       "type": "createFile",
-      "path": "result-images/hyper_param_tuning_LSTM.jpg"
+      "path": "result-images/hyper_param_tuning_LSTM.jpg",
+      "voiceover": "Now we will create a file result-images/hyper_param_tuning_LSTM.jpg.",
+      "voiceoverTiming": "before"
     },
     {
       "type": "createFile",
-      "path": "result-images/money1.jpg"
+      "path": "result-images/money1.jpg",
+      "voiceover": "Now we will create a file result-images/money1.jpg.",
+      "voiceoverTiming": "before"
     },
     {
       "type": "createFile",
-      "path": "result-images/money2.jpg"
+      "path": "result-images/money2.jpg",
+      "voiceover": "Now we will create a file result-images/money2.jpg.",
+      "voiceoverTiming": "before"
     },
     {
       "type": "createFile",
-      "path": "result-images/money3.jpg"
+      "path": "result-images/money3.jpg",
+      "voiceover": "Now we will create a file result-images/money3.jpg.",
+      "voiceoverTiming": "before"
     },
     {
       "type": "createFile",
-      "path": "result-images/other_LSTM_models_2.jpg"
+      "path": "result-images/other_LSTM_models_2.jpg",
+      "voiceover": "Now we will create a file result-images/other_LSTM_models_2.jpg.",
+      "voiceoverTiming": "before"
     },
     {
       "type": "createFile",
-      "path": "result-images/other_LSTM_results.jpg"
+      "path": "result-images/other_LSTM_results.jpg",
+      "voiceover": "Now we will create a file result-images/other_LSTM_results.jpg.",
+      "voiceoverTiming": "before"
     },
     {
       "type": "createFile",
-      "path": "test.py"
+      "path": "test.py",
+      "voiceover": "Now we will create a file test.py.",
+      "voiceoverTiming": "before"
     },
     {
       "type": "createFile",
-      "path": "train_intraday_lstm.py"
+      "path": "train_intraday_lstm.py",
+      "voiceover": "Now we will create a file train_intraday_lstm.py.",
+      "voiceoverTiming": "before"
     },
     {
       "type": "createFile",
-      "path": "train_intraday_lstm_multi.py"
+      "path": "train_intraday_lstm_multi.py",
+      "voiceover": "Now we will create a file train_intraday_lstm_multi.py.",
+      "voiceoverTiming": "before"
     },
     {
       "type": "createFile",
-      "path": "train_intraday_rf.py"
+      "path": "train_intraday_rf.py",
+      "voiceover": "Now we will create a file train_intraday_rf.py.",
+      "voiceoverTiming": "before"
     },
     {
       "type": "openFile",

@@ -436,19 +436,23 @@ def build_blueprint_from_path(path: str, output_json: str = 'full_project_bluepr
             "actions": []
         }
 
-        # Create folders
+        # Create folders with voiceover
         for folder in folders:
             blueprint['actions'].append({
                 "type": "createFolder",
-                "path": folder
+                "path": folder,
+                "voiceover": f"Now we will create a folder {folder}.",
+                "voiceoverTiming": "before"
             })
 
-        # Create all files
+        # Create all files with voiceover
         file_paths = sorted(list(py_files.keys()) + list(non_py_files.keys()))
         for file_path in file_paths:
             blueprint['actions'].append({
                 "type": "createFile",
-                "path": file_path
+                "path": file_path,
+                "voiceover": f"Now we will create a file {file_path}.",
+                "voiceoverTiming": "before"
             })
 
         # Process .py files
