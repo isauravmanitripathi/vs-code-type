@@ -10,8 +10,8 @@ The builder creates actions for:
 """
 import json
 import os
-from typing import List, Dict, Any, Optional
-from parser import CodeSegment
+from typing import List, Dict, Any, Optional, Tuple
+from parser import CodeSegment, PythonParser
 
 class BlueprintBuilder:
     """
@@ -144,21 +144,13 @@ class BlueprintBuilder:
             return code
            
         lines = code.split('\n')
-        # Get the line numbers that have inline comments (relative to segment start)
-        # We need to identify which lines have inline comments and strip the # part
-       
         cleaned_lines = []
         for line in lines:
-            # Check if this line has an inline comment (has # after code)
             if '#' in line:
-                # Split on first # that's not in a string
-                # Simple approach: split on # and keep only the code part
                 code_part = line.split('#')[0]
-                # Only strip if there's actual code before the #
                 if code_part.strip():
                     cleaned_lines.append(code_part.rstrip())
                 else:
-                    # This is a comment-only line (starts with #), keep it
                     cleaned_lines.append(line)
             else:
                 cleaned_lines.append(line)
@@ -167,10 +159,8 @@ class BlueprintBuilder:
    
     def _process_imports(self, segment: CodeSegment) -> None:
         """Process import statements."""
-        # Write the imports
         self._add_write_text(segment.code + '\n')
        
-        # If there's a comment above, highlight and explain
         if segment.comment_above:
             first_line = self._get_first_line(segment.code)
             self._add_highlight(
@@ -178,7 +168,6 @@ class BlueprintBuilder:
                 voiceover=segment.comment_above
             )
        
-        # Handle inline comments
         for inline in segment.inline_comments:
             self._add_highlight(
                 find_pattern=inline['code'],
@@ -187,13 +176,9 @@ class BlueprintBuilder:
    
     def _process_function(self, segment: CodeSegment) -> None:
         """Process function definitions."""
-        # Strip inline comments from code - they'll be added via highlight actions later
         clean_code = self._strip_inline_comments(segment.code, segment.inline_comments)
        
-        # For functions with docstrings: voiceover DURING typing (no separate highlight)
-        # For functions with # comment above: write then highlight
         if segment.docstring:
-            # Docstring becomes voiceover while typing - no separate highlight
             self._add_write_text(
                 clean_code + '\n',
                 highlight=True,
@@ -201,7 +186,6 @@ class BlueprintBuilder:
                 voiceover_timing="during"
             )
         elif segment.comment_above:
-            # # comment above - write then highlight the function signature
             self._add_write_text(clean_code + '\n', highlight=True)
             func_sig = self._get_function_signature(clean_code)
             self._add_highlight(
@@ -210,11 +194,8 @@ class BlueprintBuilder:
                 voiceover_timing="during"
             )
         else:
-            # No voiceover, just write
             self._add_write_text(clean_code + '\n', highlight=True)
        
-        # Handle inline comments - highlight specific lines and add comment as voiceover
-        # These are typed AFTER the function is fully typed with docstring voiceover
         for inline in segment.inline_comments:
             self._add_highlight(
                 find_pattern=inline['code'],
@@ -223,13 +204,9 @@ class BlueprintBuilder:
    
     def _process_class(self, segment: CodeSegment) -> None:
         """Process class definitions."""
-        # Strip inline comments from code - they'll be added via highlight actions later
         clean_code = self._strip_inline_comments(segment.code, segment.inline_comments)
        
-        # For classes with docstrings: voiceover DURING typing (no separate highlight)
-        # For classes with # comment above: write then highlight
         if segment.docstring:
-            # Docstring becomes voiceover while typing - no separate highlight
             self._add_write_text(
                 clean_code + '\n',
                 highlight=True,
@@ -237,7 +214,6 @@ class BlueprintBuilder:
                 voiceover_timing="during"
             )
         elif segment.comment_above:
-            # # comment above - write then highlight the class definition
             self._add_write_text(clean_code + '\n', highlight=True)
             first_line = self._get_first_line(clean_code)
             self._add_highlight(
@@ -246,10 +222,8 @@ class BlueprintBuilder:
                 voiceover_timing="during"
             )
         else:
-            # No voiceover, just write
             self._add_write_text(clean_code + '\n', highlight=True)
        
-        # Handle inline comments (# style) - these get highlighted after typing
         for inline in segment.inline_comments:
             self._add_highlight(
                 find_pattern=inline['code'],
@@ -258,13 +232,10 @@ class BlueprintBuilder:
    
     def _process_variable(self, segment: CodeSegment) -> None:
         """Process variable assignments."""
-        # Strip inline comments from code
         clean_code = self._strip_inline_comments(segment.code, segment.inline_comments)
        
-        # Write the variable assignment
         self._add_write_text(clean_code + '\n')
        
-        # If there's a comment above, highlight and explain
         if segment.comment_above:
             first_line = self._get_first_line(clean_code)
             self._add_highlight(
@@ -272,7 +243,6 @@ class BlueprintBuilder:
                 voiceover=segment.comment_above
             )
        
-        # Handle inline comments
         for inline in segment.inline_comments:
             self._add_highlight(
                 find_pattern=inline['code'],
@@ -281,13 +251,10 @@ class BlueprintBuilder:
    
     def _process_generic_code(self, segment: CodeSegment) -> None:
         """Process generic code blocks."""
-        # Strip inline comments from code
         clean_code = self._strip_inline_comments(segment.code, segment.inline_comments)
        
-        # Write the code
         self._add_write_text(clean_code + '\n')
        
-        # If there's a comment above, highlight and explain
         if segment.comment_above:
             first_line = self._get_first_line(clean_code)
             self._add_highlight(
@@ -295,7 +262,6 @@ class BlueprintBuilder:
                 voiceover=segment.comment_above
             )
        
-        # Handle inline comments - highlight after typing
         for inline in segment.inline_comments:
             self._add_highlight(
                 find_pattern=inline['code'],
@@ -312,10 +278,8 @@ class BlueprintBuilder:
         Returns:
             Complete blueprint dictionary
         """
-        # Reset actions
         self.actions = []
        
-        # Add initial file creation and opening
         self._add_action({
             "type": "createFile",
             "path": self.filename,
@@ -328,27 +292,21 @@ class BlueprintBuilder:
             "path": self.filename
         })
        
-        # Track the last line we wrote to preserve spacing
         last_end_line = 0
        
-        # Pending voiceover for skipped module docstrings
         pending_voiceover = None
        
-        # Process each segment based on its type
         for segment in segments:
-            # Add blank lines to preserve original spacing
             if last_end_line > 0:
                 gap = segment.start_line - last_end_line - 1
                 if gap > 0:
                     self._add_write_text('\n' * gap)
            
-            # Special handling for module-level docstrings: skip typing, save as pending voiceover, update last_end_line
             if segment.segment_type == 'expression' and segment.code.strip().startswith('"""') and segment.code.strip().endswith('"""'):
                 pending_voiceover = segment.code.strip()[3:-3].strip()
                 last_end_line = segment.end_line
                 continue
            
-            # If there's a pending voiceover and this is a class or function, prepend it to the docstring
             if pending_voiceover and segment.segment_type in ['class', 'function']:
                 if segment.docstring:
                     segment.docstring = pending_voiceover + '\n\n' + segment.docstring
@@ -367,10 +325,8 @@ class BlueprintBuilder:
             else:
                 self._process_generic_code(segment)
            
-            # Update last end line
             last_end_line = segment.end_line
        
-        # Build final blueprint
         blueprint = {
             "rootFolder": self._create_root_folder_name(),
             "globalTypingSpeed": self.typing_speed,
@@ -427,32 +383,94 @@ def build_blueprint(
     )
     return builder.build(segments)
 
-if __name__ == '__main__':
-    # Test with parser output
-    from parser import PythonParser
-   
-    test_code = '''
-# Importing libraries for data processing
-import os
-import sys
-# Configuration seed for reproducibility
-SEED = 42
-def hello(name):
+def build_blueprint_from_path(path: str, output_json: str = 'full_project_blueprint.json') -> None:
     """
-    Says hello to someone with a friendly greeting.
-    This function demonstrates basic string formatting.
+    Builds a single JSON blueprint from a file or directory path.
+    - If path is a .py file, processes it as a single file.
+    - If path is a directory, creates the full structure and processes all .py files.
+    - Ignores hidden folders and files.
+    - Non-.py files are created empty.
+    - .py files are created, opened, parsed, and have write/highlight actions added.
     """
-    print(f"Hello, {name}!") # Print the greeting
-    return True
-# Main execution block
+    def collect_structure(root_dir: str) -> Tuple[List[str], Dict[str, str]]:
+        folders = []
+        files = {}
+        for dirpath, dirnames, filenames in os.walk(root_dir):
+            # Ignore hidden folders
+            dirnames[:] = [d for d in dirnames if not d.startswith('.')]
+            rel_dir = os.path.relpath(dirpath, root_dir)
+            if rel_dir != '.' and not rel_dir.startswith('.'):
+                folders.append(rel_dir)
+            for fname in filenames:
+                if not fname.startswith('.'):
+                    rel_path = os.path.join(rel_dir, fname) if rel_dir != '.' else fname
+                    files[rel_path] = os.path.join(dirpath, fname)
+        # Sort folders by depth (parents first)
+        folders.sort(key=lambda f: (f.count(os.sep), f))
+        return folders, files
+
+    is_file = os.path.isfile(path)
+    if is_file:
+        if not path.endswith('.py'):
+            raise ValueError("Single file must be a .py file.")
+        with open(path, 'r', encoding='utf-8') as f:
+            source_code = f.read()
+        parser = PythonParser(source_code)
+        segments = parser.parse()
+        filename = os.path.basename(path)
+        blueprint = build_blueprint(segments, filename)
+    else:
+        # Directory
+        folders, all_files = collect_structure(path)
+        py_files = {rel: abs_p for rel, abs_p in all_files.items() if rel.endswith('.py')}
+        non_py_files = {rel: abs_p for rel, abs_p in all_files.items() if not rel.endswith('.py')}
+
+        # Initialize blueprint
+        root_name = os.path.basename(os.path.abspath(path)) + '-demo'
+        blueprint = {
+            "rootFolder": root_name,
+            "globalTypingSpeed": 35,
+            "actionDelay": 1000,
+            "defaultVoice": "en-US-BrianNeural",
+            "enableVoiceover": True,
+            "actions": []
+        }
+
+        # Create folders
+        for folder in folders:
+            blueprint['actions'].append({
+                "type": "createFolder",
+                "path": folder
+            })
+
+        # Create all files
+        file_paths = sorted(list(py_files.keys()) + list(non_py_files.keys()))
+        for file_path in file_paths:
+            blueprint['actions'].append({
+                "type": "createFile",
+                "path": file_path
+            })
+
+        # Process .py files
+        for rel_path, abs_path in sorted(py_files.items()):
+            blueprint['actions'].append({
+                "type": "openFile",
+                "path": rel_path
+            })
+            with open(abs_path, 'r', encoding='utf-8') as f:
+                source_code = f.read()
+            parser = PythonParser(source_code)
+            segments = parser.parse()
+            builder = BlueprintBuilder(filename=rel_path)
+            file_blueprint = builder.build(segments)
+            # Skip the create/open actions (already done), add the rest
+            file_actions = file_blueprint['actions'][2:]
+            blueprint['actions'].extend(file_actions)
+
+    # Save
+    with open(output_json, 'w', encoding='utf-8') as f:
+        json.dump(blueprint, f, indent=2, ensure_ascii=False)
+    print(f"Blueprint saved to {output_json}")
+
 if __name__ == '__main__':
-    hello("World")
-'''
-   
-    parser = PythonParser(test_code)
-    segments = parser.parse()
-   
-    builder = BlueprintBuilder(filename='test.py')
-    blueprint = builder.build(segments)
-   
-    print(json.dumps(blueprint, indent=2))
+    build_blueprint_from_path('/Users/sauravtripathi/Downloads/Ncert-books/onepagecode-stock-market-forecast', output_json='stock_market_forecast_blueprint.json')
