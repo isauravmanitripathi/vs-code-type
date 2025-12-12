@@ -29,6 +29,10 @@
     },
     {
       "type": "writeText",
+      "content": "\n"
+    },
+    {
+      "type": "writeText",
       "content": "SEED = 9\n"
     },
     {
@@ -53,6 +57,10 @@
     },
     {
       "type": "writeText",
+      "content": "\n\n"
+    },
+    {
+      "type": "writeText",
       "content": "SP500_df = pd.read_csv('data/SPXconst.csv')\n"
     },
     {
@@ -73,6 +81,10 @@
     },
     {
       "type": "writeText",
+      "content": "\n\n"
+    },
+    {
+      "type": "writeText",
       "content": "constituents = {'-'.join(col.split('/')[::-1]):set(SP500_df[col].dropna()) \n                for col in SP500_df.columns}\n"
     },
     {
@@ -82,6 +94,10 @@
       "voiceover": "Creating a dictionary to map each month to its set of S&P 500 constituents",
       "voiceoverTiming": "during",
       "moveCursor": "endOfFile"
+    },
+    {
+      "type": "writeText",
+      "content": "\n\n"
     },
     {
       "type": "writeText",
@@ -112,7 +128,7 @@
     },
     {
       "type": "writeText",
-      "content": "\n"
+      "content": "\n\n"
     },
     {
       "type": "writeText",
@@ -169,11 +185,19 @@
     },
     {
       "type": "writeText",
+      "content": "\n"
+    },
+    {
+      "type": "writeText",
       "content": "result_folder = 'results-Intraday-240-1-RF'\n"
     },
     {
       "type": "writeText",
       "content": "for directory in [result_folder]:\n    if not os.path.exists(directory):\n        os.makedirs(directory)\n"
+    },
+    {
+      "type": "writeText",
+      "content": "\n"
     },
     {
       "type": "writeText",
