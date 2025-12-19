@@ -463,11 +463,23 @@ export function activate(context: vscode.ExtensionContext) {
         let blueprintSuccess = true;
         let blueprintError = '';
 
+        // Track current file being edited for detailed progress reporting
+        let currentEditingFile: string | undefined = undefined;
+
         try {
           for (let i = 0; i < blueprint.actions.length; i++) {
             const action = blueprint.actions[i];
             const nextAction = i + 1 < blueprint.actions.length ? blueprint.actions[i + 1] : null;
-            const actionName = getActionDescription(action);
+
+            // Update current file tracker based on action
+            if (action.type === 'openFile' && action.path) {
+              currentEditingFile = action.path;
+            } else if (action.type === 'createFile' && action.path) {
+              // createFile followed by implicit open - track it
+              currentEditingFile = action.path;
+            }
+
+            const actionName = getActionDescription(action, currentEditingFile);
 
             // Update current status message for timer
             currentStatusMessage = `$(rocket) [${i + 1}/${totalActions}] ${actionName}`;
@@ -666,7 +678,7 @@ export function activate(context: vscode.ExtensionContext) {
               console.error(`${'❌'.repeat(30)}\n`);
 
               // SHOW VS CODE TOAST NOTIFICATION
-              const actionDescription = getActionDescription(action);
+              const actionDescription = getActionDescription(action, currentEditingFile);
               const notificationMessage = `Blueprint crashed at action ${i + 1}/${totalActions}: ${action.type}\n\nError: ${errorMessage}\n\nCheck Debug Console for full details.`;
 
               vscode.window.showErrorMessage(
@@ -841,7 +853,9 @@ export function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(testDisposable);
 }
 
-function getActionDescription(action: Action): string {
+function getActionDescription(action: Action, currentFile?: string): string {
+  const fileContext = currentFile ? ` in ${currentFile}` : '';
+
   switch (action.type) {
     case 'createFolder':
       return `Creating folder: ${action.path}`;
@@ -850,18 +864,18 @@ function getActionDescription(action: Action): string {
     case 'openFile':
       return `Opening: ${action.path}`;
     case 'writeText':
-      return `Writing text...`;
+      return `Writing text${fileContext}`;
     case 'insert':
-      if (action.after) return `Inserting after: ${action.after.substring(0, 20)}...`;
-      if (action.before) return `Inserting before: ${action.before.substring(0, 20)}...`;
-      if (action.at !== undefined) return `Inserting at line ${action.at}`;
-      return `Inserting code...`;
+      if (action.after) return `Inserting after "${action.after.substring(0, 20)}..."${fileContext}`;
+      if (action.before) return `Inserting before "${action.before.substring(0, 20)}..."${fileContext}`;
+      if (action.at !== undefined) return `Inserting at line ${action.at}${fileContext}`;
+      return `Inserting code${fileContext}`;
     case 'delete':
-      return `Deleting: ${action.find?.substring(0, 20)}...`;
+      return `Deleting "${action.find?.substring(0, 20)}..."${fileContext}`;
     case 'replace':
-      return `Replacing: ${action.find?.substring(0, 20)}...`;
+      return `Replacing "${action.find?.substring(0, 20)}..."${fileContext}`;
     case 'highlight':
-      return `Highlighting: ${action.find?.substring(0, 20)}...`;
+      return `Highlighting "${action.find?.substring(0, 20)}..." in ${action.path}`;
     case 'openTerminal':
       return `Opening terminal: ${action.terminalName || 'Build'}`;
     case 'runCommand':

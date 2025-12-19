@@ -477,4 +477,4 @@ def build_blueprint_from_path(path: str, output_json: str = 'full_project_bluepr
     print(f"Blueprint saved to {output_json}")
 
 if __name__ == '__main__':
-    build_blueprint_from_path('/Users/sauravtripathi/Downloads/Ncert-books/onepagecode-stock-market-forecast', output_json='stock_market_forecast_blueprint.json')
+    build_blueprint_from_path('/Users/sauravtripathi/Downloads/Ncert-books/nanochat-master-test', output_json='andrej-kara-nunuchat.json')

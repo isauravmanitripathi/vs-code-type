@@ -56,7 +56,13 @@ class PythonParser:
         self.source_code = source_code
         self.lines = source_code.split('\n')
         self.comments = self._extract_comments()
-        self.tree = ast.parse(source_code)
+        try:
+            self.tree = ast.parse(source_code)
+        except (SyntaxError, IndentationError) as e:
+            # If the file has syntax/indentation errors, create an empty module
+            # This allows the blueprint builder to continue processing other files
+            print(f"Warning: Failed to parse source code due to {type(e).__name__}: {e}")
+            self.tree = ast.Module(body=[], type_ignores=[])
        
     def _extract_comments(self) -> Dict[int, Tuple[str, bool]]:
         """
@@ -81,8 +87,8 @@ class PythonParser:
                     is_inline = len(line_content) > 0
                    
                     comments[line_no] = (text, is_inline)
-        except tokenize.TokenError:
-            pass # Handle incomplete code gracefully
+        except (tokenize.TokenError, IndentationError):
+            pass # Handle incomplete code and indentation errors gracefully
            
         return comments
    

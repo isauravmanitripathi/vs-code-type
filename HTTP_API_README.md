@@ -60,7 +60,7 @@ curl http://localhost:6969/status
 
 ### GET /progress
 
-Check the current execution status and progress.
+Check the current execution status and progress. The `currentAction` field tells you exactly what the extension is doing and **which file** is being edited.
 
 **Request:**
 ```bash
@@ -81,7 +81,7 @@ curl http://localhost:6969/progress
   "busy": true,
   "status": "processing",
   "blueprint": "rust-demo.json",
-  "currentAction": "Creating file: src/main.rs",
+  "currentAction": "Writing text in src/main.rs",
   "progress": {
     "current": 5,
     "total": 25,
@@ -89,6 +89,25 @@ curl http://localhost:6969/progress
   }
 }
 ```
+
+#### `currentAction` Examples
+
+The `currentAction` field provides detailed information about what's happening:
+
+| Action Type | Example `currentAction` Value |
+|-------------|------------------------------|
+| `createFolder` | `Creating folder: src/components` |
+| `createFile` | `Creating file: src/main.py` |
+| `openFile` | `Opening: utils/helpers.py` |
+| `writeText` | `Writing text in src/main.py` |
+| `insert` | `Inserting after "import os..."` in config.py |
+| `insert` (at line) | `Inserting at line 5 in main.rs` |
+| `insert` (before) | `Inserting before "def main..."` in app.py |
+| `delete` | `Deleting "# TODO:..." in src/lib.rs` |
+| `replace` | `Replacing "old_func..." in utils.py` |
+| `highlight` | `Highlighting "pattern..." in src/main.py` |
+| `openTerminal` | `Opening terminal: Build` |
+| `runCommand` | `Running: npm install...` |
 
 **Response (Done):**
 ```json
