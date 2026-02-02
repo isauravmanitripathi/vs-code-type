@@ -21,7 +21,7 @@ export class AudioHandler {
    * Play voiceover using pre-cached audio and delete it after use
    */
   async playVoiceover(
-    text: string, 
+    text: string,
     voice: string = 'en-US-AriaNeural',
     timing: 'before' | 'after' | 'during' = 'before'
   ): Promise<void> {
@@ -80,20 +80,24 @@ export class AudioHandler {
 
       // Choose audio player based on platform
       if (process.platform === 'darwin') {
-        // macOS - try mpv first, fallback to afplay
+        // macOS
         command = `mpv --no-video --really-quiet "${filePath}" 2>/dev/null || afplay "${filePath}"`;
       } else if (process.platform === 'win32') {
         // Windows
         command = `powershell -c "(New-Object Media.SoundPlayer '${filePath}').PlaySync()"`;
       } else {
-        // Linux
-        command = `mpv --no-video --really-quiet "${filePath}" 2>/dev/null || ffplay -nodisp -autoexit "${filePath}" 2>/dev/null`;
+        // Linux - Force PulseAudio and add timeout
+        // We use timeout command to prevent infinite hangs
+        command = `timeout 30s mpv --no-video --really-quiet --ao=pulse "${filePath}" 2>/dev/null || timeout 30s ffplay -nodisp -autoexit "${filePath}" 2>/dev/null`;
       }
 
-      exec(command, (error, stdout, stderr) => {
+      console.log(`Executing audio command: ${command}`);
+
+      exec(command, { timeout: 35000 }, (error, stdout, stderr) => {
         if (error) {
-          console.error('Audio playback error:', error);
-          reject(error);
+          console.warn('Audio playback warning (continuing anyway):', error.message);
+          // We resolve anyway so the tutorial doesn't stuck
+          resolve();
         } else {
           resolve();
         }

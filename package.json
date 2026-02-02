@@ -2,7 +2,7 @@
   "name": "json-project-builder",
   "displayName": "json-project-builder",
   "description": "Build a complete education video from a simple json structure",
-  "version": "0.0.3",
+  "version": "0.0.4",
   "publisher": "isauravmanitripathi",
   "repository": {
     "type": "git",
