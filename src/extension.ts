@@ -510,8 +510,8 @@ export function activate(context: vscode.ExtensionContext) {
                 console.log(`🔦 Executing HIGHLIGHT action...`);
                 console.log(`   - Target file: ${action.path}`);
                 console.log(`   - Pattern to find: "${action.find}"`);
-                if (action.near) console.log(`   - Context (near): "${action.near}"`);
-                if (action.voiceover) console.log(`   - Has voiceover: Yes`);
+                if (action.near) { console.log(`   - Context (near): "${action.near}"`); }
+                if (action.voiceover) { console.log(`   - Has voiceover: Yes`); }
 
                 await handleHighlightWithVoiceover(action, baseDir, enableVoiceover, defaultVoice, currentStatusMessage, (msg) => { currentStatusMessage = msg; });
 
@@ -866,9 +866,9 @@ function getActionDescription(action: Action, currentFile?: string): string {
     case 'writeText':
       return `Writing text${fileContext}`;
     case 'insert':
-      if (action.after) return `Inserting after "${action.after.substring(0, 20)}..."${fileContext}`;
-      if (action.before) return `Inserting before "${action.before.substring(0, 20)}..."${fileContext}`;
-      if (action.at !== undefined) return `Inserting at line ${action.at}${fileContext}`;
+      if (action.after) { return `Inserting after "${action.after.substring(0, 20)}..."${fileContext}`; }
+      if (action.before) { return `Inserting before "${action.before.substring(0, 20)}..."${fileContext}`; }
+      if (action.at !== undefined) { return `Inserting at line ${action.at}${fileContext}`; }
       return `Inserting code${fileContext}`;
     case 'delete':
       return `Deleting "${action.find?.substring(0, 20)}..."${fileContext}`;
@@ -995,7 +995,7 @@ async function handleHighlightWithVoiceover(
  */
 async function handlePostHighlight(currentAction: Action, nextAction: Action | null): Promise<void> {
   const editor = vscode.window.activeTextEditor;
-  if (!editor) return;
+  if (!editor) { return; }
 
   const document = editor.document;
 
@@ -1006,7 +1006,7 @@ async function handlePostHighlight(currentAction: Action, nextAction: Action | n
   }
 
   // Otherwise, use smart detection based on next action
-  if (!nextAction) return;
+  if (!nextAction) { return; }
 
   const needsRepositioning =
     nextAction.type === 'writeText' ||
@@ -1238,7 +1238,7 @@ function normalizeIndentation(content: string, targetIndent: string, options: { 
  * Auto-format the current document
  */
 async function autoFormatDocument(editor: vscode.TextEditor): Promise<void> {
-  if (!editor) return;
+  if (!editor) { return; }
 
   try {
     await vscode.commands.executeCommand('editor.action.formatDocument');
@@ -1300,7 +1300,7 @@ async function executeAction(
 
   switch (action.type) {
     case 'createFolder':
-      if (!action.path) throw new Error('createFolder requires path');
+      if (!action.path) { throw new Error('createFolder requires path'); }
 
       updateMessage(`$(folder) Creating folder: ${action.path}`);
       await vscode.commands.executeCommand('workbench.view.explorer');
@@ -1324,7 +1324,7 @@ async function executeAction(
       break;
 
     case 'createFile':
-      if (!action.path) throw new Error('createFile requires path');
+      if (!action.path) { throw new Error('createFile requires path'); }
 
       updateMessage(`$(file-add) Creating file: ${action.path}`);
       await vscode.commands.executeCommand('workbench.view.explorer');
@@ -1350,7 +1350,7 @@ async function executeAction(
       break;
 
     case 'openFile':
-      if (!action.path) throw new Error('openFile requires path');
+      if (!action.path) { throw new Error('openFile requires path'); }
       updateMessage(`$(file-code) Opening: ${action.path}`);
       const openPath = path.join(baseDir, action.path);
       const doc = await vscode.workspace.openTextDocument(openPath);
@@ -1359,12 +1359,19 @@ async function executeAction(
       break;
 
     case 'writeText':
-      if (!action.content) throw new Error('writeText requires content');
+      if (!action.content) { throw new Error('writeText requires content'); }
       const editor = vscode.window.activeTextEditor;
-      if (!editor) throw new Error('No active editor');
+      if (!editor) { throw new Error('No active editor'); }
 
       updateMessage(`$(edit) Writing text...`);
-      await typeText(editor, action.content, typingSpeed);
+
+      // Auto-newline feature: Ensure content ends with newline if not present
+      let contentToWrite = action.content;
+      if (!contentToWrite.endsWith('\n')) {
+        contentToWrite += '\n';
+      }
+
+      await typeText(editor, contentToWrite, typingSpeed);
       break;
 
     case 'insert':
@@ -1395,7 +1402,7 @@ async function executeAction(
     }
 
     case 'runCommand': {
-      if (!action.command) throw new Error('runCommand requires command');
+      if (!action.command) { throw new Error('runCommand requires command'); }
       const termName = action.terminalName || 'Build';
 
       if (!terminalHandler.hasTerminal(termName)) {
@@ -1519,7 +1526,7 @@ async function insertAfterPattern(
         const currentLine = document.lineAt(i);
         const currentText = currentLine.text;
 
-        if (currentText.trim().length === 0) continue;
+        if (currentText.trim().length === 0) { continue; }
 
         const currentIndent = detectIndentation(currentText, options);
 
@@ -1547,7 +1554,7 @@ async function insertAfterPattern(
             if (foundOpening && braceCount === 0) { insertAfterLine = i; break; }
           }
         }
-        if (foundOpening && braceCount === 0) break;
+        if (foundOpening && braceCount === 0) { break; }
       }
     }
   }

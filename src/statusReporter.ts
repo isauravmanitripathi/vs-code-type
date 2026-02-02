@@ -31,7 +31,7 @@ export class StatusReporter {
      * Never throws errors - silently fails if server unavailable
      */
     private send(payload: StatusPayload): void {
-        if (!this.enabled) return;
+        if (!this.enabled) { return; }
 
         const data = JSON.stringify(payload);
 

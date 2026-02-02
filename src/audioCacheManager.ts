@@ -50,7 +50,7 @@ export class AudioCacheManager {
     const uniqueRequests: VoiceoverRequest[] = [];
     for (const request of requests) {
       const key = this.generateKey(request.text, request.voice);
-      
+
       if (!this.cache.has(key)) {
         this.cache.set(key, {
           key,
@@ -65,7 +65,7 @@ export class AudioCacheManager {
     console.log(`${uniqueRequests.length} unique voiceovers to generate in parallel`);
 
     // Start generating all audio files in parallel (don't wait)
-    const promises = uniqueRequests.map(request => 
+    const promises = uniqueRequests.map(request =>
       this.generateAudio(request.text, request.voice)
     );
 
@@ -74,7 +74,7 @@ export class AudioCacheManager {
 
     const ready = Array.from(this.cache.values()).filter(e => e.status === 'ready').length;
     const failed = Array.from(this.cache.values()).filter(e => e.status === 'failed').length;
-    
+
     console.log(`Audio generation complete: ${ready} ready, ${failed} failed`);
   }
 
@@ -84,7 +84,7 @@ export class AudioCacheManager {
   private async generateAudio(text: string, voice: string): Promise<void> {
     const key = this.generateKey(text, voice);
     const entry = this.cache.get(key);
-    
+
     if (!entry) {
       throw new Error('Cache entry not found');
     }
@@ -237,7 +237,7 @@ export class AudioCacheManager {
     } catch (error) {
       console.error('Error cleaning up audio cache:', error);
     }
-    
+
     this.cache.clear();
     this.generationPromises.clear();
   }
@@ -257,7 +257,7 @@ export class AudioCacheManager {
         }
       }
     }
-    
+
     this.cache.clear();
     this.generationPromises.clear();
   }

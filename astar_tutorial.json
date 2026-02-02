@@ -1,0 +1,52 @@
+[
+    {
+        "type": "createFile",
+        "path": "astar_pathfinding.py"
+    },
+    {
+        "type": "openFile",
+        "path": "astar_pathfinding.py"
+    },
+    {
+        "type": "writeText",
+        "content": "import heapq\n\n",
+        "voiceover": "Welcome! Today we'll implement the A-Star pathfinding algorithm. We start by importing heapq for our priority queue.",
+        "typingSpeed": 80
+    },
+    {
+        "type": "writeText",
+        "content": "class Grid:\n    def __init__(self, width, height):\n        self.width = width\n        self.height = height\n        self.walls = []\n    \n    def in_bounds(self, id):\n        (x, y) = id\n        return 0 <= x < self.width and 0 <= y < self.height\n    \n    def passible(self, id):\n        return id not in self.walls\n    \n    def neighbors(self, id):\n        (x, y) = id\n        results = [(x+1, y), (x, y-1), (x-1, y), (x, y+1)]\n        if (x + y) % 2 == 0: results.reverse() # aesthetics\n        results = filter(self.in_bounds, results)\n        results = filter(self.passible, results)\n        return results\n\n",
+        "voiceover": "Let's define a simple Grid class. It handles boundaries and walls to tell us which neighbors are valid.",
+        "typingSpeed": 50
+    },
+    {
+        "type": "highlight",
+        "path": "astar_pathfinding.py",
+        "find": "def neighbors",
+        "voiceover": "The neighbors function moves in 4 directions: Right, Up, Left, and Down."
+    },
+    {
+        "type": "writeText",
+        "content": "def heuristic(a, b):\n    (x1, y1) = a\n    (x2, y2) = b\n    return abs(x1 - x2) + abs(y1 - y2)\n\n",
+        "voiceover": "Next, the heuristic. For a square grid, the Manhattan distance is a great choice. It calculates the raw distance without diagonals.",
+        "typingSpeed": 60
+    },
+    {
+        "type": "writeText",
+        "content": "def a_star_search(graph, start, goal):\n    frontier = []\n    heapq.heappush(frontier, (0, start))\n    came_from = {}\n    cost_so_far = {}\n    came_from[start] = None\n    cost_so_far[start] = 0\n    \n    while frontier:\n        current = heapq.heappop(frontier)[1]\n        \n        if current == goal:\n            break\n        \n        for next in graph.neighbors(current):\n            new_cost = cost_so_far[current] + 1\n            if next not in cost_so_far or new_cost < cost_so_far[next]:\n                cost_so_far[next] = new_cost\n                priority = new_cost + heuristic(goal, next)\n                heapq.heappush(frontier, (priority, next))\n                came_from[next] = current\n    \n    return came_from, cost_so_far\n\n",
+        "voiceover": "Here is the core A* algorithm. We use a priority queue called 'frontier' to explore the most promising nodes first.",
+        "typingSpeed": 40
+    },
+    {
+        "type": "highlight",
+        "path": "astar_pathfinding.py",
+        "find": "priority =",
+        "voiceover": "The priority is the magic part: it combines the cost related to the start node, and the estimated cost to the goal."
+    },
+    {
+        "type": "writeText",
+        "content": "# Let's test it!\ng = Grid(10, 10)\ng.walls = [(1, 7), (1, 8), (2, 7), (2, 8), (3, 7), (3, 8)]\nstart, goal = (1, 1), (8, 8)\nparents, cost = a_star_search(g, start, goal)\nprint('Path found!')\nprint(f'Cost to goal: {cost[goal]}')\n",
+        "voiceover": "Finally, let's setup a 10 by 10 grid with some walls, and find the path from 1,1 to 8,8. We print the cost at the end.",
+        "typingSpeed": 70
+    }
+]

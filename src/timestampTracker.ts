@@ -23,7 +23,7 @@ export class TimestampTracker {
     this.entries = [];
     this.outputFolder = folderPath;
     this.hasIntroEntry = addIntroEntry;
-    
+
     // Add initial "Start" or "Introduction" entry if requested
     if (addIntroEntry) {
       this.entries.push({
@@ -32,7 +32,7 @@ export class TimestampTracker {
         displayName: 'Introduction'
       });
     }
-    
+
     console.log('Timestamp tracker started');
   }
 
@@ -41,21 +41,21 @@ export class TimestampTracker {
    */
   recordBlueprintStart(fileName: string): void {
     const elapsed = Date.now() - this.startTime;
-    
+
     // If this is the first blueprint and we have an intro entry, set its end time
     if (this.hasIntroEntry && this.entries.length === 1 && this.entries[0].fileName === '__intro__') {
       this.entries[0].endTime = elapsed;
     }
-    
+
     // Get display name (remove .json extension and clean up)
     const displayName = this.getDisplayName(fileName);
-    
+
     this.entries.push({
       startTime: elapsed,
       fileName: fileName,
       displayName: displayName
     });
-    
+
     console.log(`Recorded start: ${displayName} at ${this.formatTimestamp(elapsed)}`);
   }
 
@@ -63,8 +63,8 @@ export class TimestampTracker {
    * Record the end of the current blueprint
    */
   recordBlueprintEnd(): void {
-    if (this.entries.length === 0) return;
-    
+    if (this.entries.length === 0) { return; }
+
     // Find the last non-intro entry
     const currentEntry = this.entries[this.entries.length - 1];
     if (!currentEntry.endTime && currentEntry.fileName !== '__intro__') {
@@ -80,18 +80,18 @@ export class TimestampTracker {
   private getDisplayName(fileName: string): string {
     // Remove .json extension
     let name = fileName.replace('.json', '');
-    
+
     // Remove number prefixes like "01-", "1-", etc.
     name = name.replace(/^\d+-/, '');
-    
+
     // Replace hyphens and underscores with spaces
     name = name.replace(/[-_]/g, ' ');
-    
+
     // Capitalize first letter of each word
     name = name.split(' ')
       .map(word => word.charAt(0).toUpperCase() + word.slice(1))
       .join(' ');
-    
+
     return name;
   }
 
@@ -119,7 +119,7 @@ export class TimestampTracker {
     if (this.startTime === 0) {
       return '[00:00:00]';
     }
-    
+
     const elapsed = Date.now() - this.startTime;
     const totalSeconds = Math.floor(elapsed / 1000);
     const hours = Math.floor(totalSeconds / 3600);
@@ -140,11 +140,11 @@ export class TimestampTracker {
 
     // Build the timestamp content
     const lines: string[] = [];
-    
+
     for (let i = 0; i < this.entries.length; i++) {
       const entry = this.entries[i];
       const startFormatted = this.formatTimestamp(entry.startTime);
-      
+
       // Use end time if available, otherwise use start of next entry or current time
       let endTime: number;
       if (entry.endTime) {
@@ -154,9 +154,9 @@ export class TimestampTracker {
       } else {
         endTime = Date.now() - this.startTime;
       }
-      
+
       const endFormatted = this.formatTimestamp(endTime);
-      
+
       lines.push(`${startFormatted} - ${endFormatted} ${entry.displayName}`);
     }
 
@@ -165,7 +165,7 @@ export class TimestampTracker {
 
     // Save to timestamps.txt in the folder
     const timestampPath = path.join(this.outputFolder, 'timestamps.txt');
-    
+
     try {
       fs.writeFileSync(timestampPath, content, 'utf-8');
       console.log(`Timestamps saved to: ${timestampPath}`);
